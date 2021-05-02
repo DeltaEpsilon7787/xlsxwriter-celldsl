@@ -1,6 +1,6 @@
 from functools import reduce
 from itertools import chain
-from typing import Iterable, Optional, TYPE_CHECKING
+from typing import Iterable, List, Optional, TYPE_CHECKING
 
 from attr import attrs
 from xlsxwriter import Workbook
@@ -9,7 +9,7 @@ from xlsxwriter.worksheet import Worksheet
 from .formats import FormatHandler
 
 if TYPE_CHECKING:
-    from .ops import WriteRichOp
+    from cell_dsl import CommitTypes
 
 
 @attrs(auto_attribs=True)
@@ -41,7 +41,7 @@ def row_chain(
         range_name: Optional[str] = None,
         array_name: Optional[str] = None,
         step=1
-):
+) -> List['CommitTypes']:
     """Iterate `iterable` and insert `step` NextCols between each command and then come back to start
     Perhaps also save initial location as `initial_save_name` and final location as `final_save_name`.
     Perhaps also make the result a named range with name `range_name`.
@@ -77,7 +77,7 @@ def col_chain(
         range_name: Optional[str] = None,
         array_name: Optional[str] = None,
         step=1
-):
+) -> List['CommitTypes']:
     """Iterate `iterable` and insert `step` NextRows between each command and then come back to start
     Perhaps also save initial location as `initial_save_name` and final location as `final_save_name`.
     Perhaps also make the result a named range with name `range_name`.
@@ -111,3 +111,14 @@ def chain_rich(iterable: Iterable['WriteRichOp']) -> 'WriteRichOp':
     from .ops import WriteRichOp
 
     return reduce(WriteRichOp.then, iterable)
+
+
+def segment(name, iterable: Iterable['CommitTypes']) -> List['CommitTypes']:
+    """A simple helper command to pad `iterable` of commands with SectionBegin and matching SectionEnd with `name`"""
+    from .ops import SectionBegin, SectionEnd
+
+    return [
+        SectionBegin.with_name(name),
+        iterable,
+        SectionEnd
+    ]

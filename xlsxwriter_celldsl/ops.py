@@ -44,21 +44,42 @@ class RefArrayOp(Command, traits.Range, traits.NamedPoint):
     with a string like '=SheetName!$C$1:$F$9'."""
 
 
+@attrs(auto_attribs=True, frozen=True)
+class SectionBeginOp(Command):
+    """A command that does nothing, but may assist in debugging and documentation
+    of scripts by giving providing segments in script `with_name`.
+
+    During execution, if an error occurs, the surrounding names will be displayed, in order from most
+    recent to least recent."""
+
+    name: str = "__UNNAMED"
+
+    def with_name(self, name: str):
+        return evolve(self, name=name)
+
+
+@attrs(auto_attribs=True, frozen=True)
+class SectionEndOp(Command):
+    """A command that indicates an end of the most recent `SectionBeginOp`."""
+
+
 StackSave = StackSaveOp()
 StackLoad = StackLoadOp()
 Load = LoadOp()
 Save = SaveOp()
 RefArray = RefArrayOp()
+SectionBegin = SectionBeginOp()
+SectionEnd = SectionEndOp()
 
 
 @attrs(auto_attribs=True, frozen=True)
-class MoveOp(Command, traits.RelativeMove):
+class MoveOp(Command, traits.RelativePosition):
     """A command to move `r` rows and `c` columns away from current cell."""
 
 
 @attrs(auto_attribs=True, frozen=True)
-class AtCellOp(Command, traits.Position):
-    """A command to go to a cell `at_row` and `at_col`."""
+class AtCellOp(Command, traits.AbsolutePosition):
+    """A command to go to a cell `r` and `c`."""
 
 
 @attrs(auto_attribs=True, frozen=True)
@@ -80,10 +101,16 @@ class WriteOp(Command, traits.Data, traits.Format, traits.ExecutableCommand):
     """A command to write to this cell `with_data` and `with_format`."""
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
-        if target.ws.write(
-                *coords, self.data, self.ensure_format(target.fmt)
-        ) == -1:
-            raise IndexError('Sequential write failed.')
+        return_code = target.ws.write(*coords, self.data, self.ensure_format(target.fmt))
+
+        if return_code == -2:
+            raise ValueError('Write failed because the string is longer than 32k characters')
+
+        if return_code == -3:
+            raise ValueError('Write failed because the URL is longer than 2079 characters long')
+
+        if return_code == -4:
+            raise ValueError('Write failed because there are more than 65530 URLs in the sheet')
 
 
 @attrs(auto_attribs=True, frozen=True)
@@ -92,13 +119,22 @@ class MergeWriteOp(Command, traits.CardinalSize, traits.Data, traits.Format, tra
     into this cell."""
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
-        target.ws.merge_range(
+        return_code = target.ws.merge_range(
             *coords,
             coords[0],
             coords[1] + self.size,
             self.data,
             self.ensure_format(target.fmt)
         )
+
+        if return_code == -2:
+            raise ValueError('Merge write failed because the string is longer than 32k characters')
+
+        if return_code == -3:
+            raise ValueError('Merge write failed because the URL is longer than 2079 characters long')
+
+        if return_code == -4:
+            raise ValueError('Merge write failed because there are more than 65530 URLs in the sheet')
 
 
 @attrs(auto_attribs=True, frozen=True)
@@ -117,8 +153,13 @@ class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand)
             fragment.data
             for fragment in fragments
         )))
-        if target.ws.write_rich_string(*coords, *formats_and_data) == -1:
-            raise IndexError('Sequential write failed.')
+
+        return_code = target.ws.write_rich_string(*coords, *formats_and_data)
+        if return_code == -2:
+            raise ValueError('Rich write failed because the string is longer than 32k characters')
+
+        if return_code == -4:
+            raise ValueError('Rich write failed because of an empty string')
 
     def then(self, fragment: 'WriteRichOp'):
         """Submit additional fragments of the rich string"""
@@ -142,6 +183,7 @@ class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand)
 
     @property
     def rich_chain(self):
+        """Not for public use; the flattened chain of segments"""
         chain = self
 
         result = []
@@ -155,6 +197,7 @@ class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand)
 
     @property
     def format_(self):
+        """Not for public use; the format to be applied"""
         return self.set_format or self.default_format or self.FALLBACK_FORMAT
 
 

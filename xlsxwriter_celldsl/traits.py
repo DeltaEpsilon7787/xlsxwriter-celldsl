@@ -3,7 +3,7 @@ from functools import lru_cache
 from numbers import Integral, Real
 from typing import Any, ClassVar, Dict, Optional, TYPE_CHECKING, Tuple, TypeVar, Union
 
-from attr import Factory, attrib, attrs, evolve
+from attr import attrib, attrs, evolve
 
 from .formats import FormatDict, FormatHandler, FormatsNamespace
 from .utils import WorksheetTriplet
@@ -28,6 +28,7 @@ class FractionalSize(Trait):
     size: Real = 0.0
 
     def with_size(self: T, size: Real) -> T:
+        """Specify the real-valued `size` for this object."""
         return evolve(self, size=size)
 
 
@@ -37,23 +38,43 @@ class CardinalSize(Trait):
     size: int = 0
 
     def with_size(self: T, size: Integral) -> T:
+        """Specify the integral `size` for this object."""
         return evolve(self, size=size)
 
 
 @attrs(auto_attribs=True)
-class Position(Trait):
+class AbsolutePosition(Trait):
     """Commands with this aspect target a specific cell at `row` and `col`"""
 
     row: int = -1
     col: int = -1
 
     @lru_cache(maxsize=None)
-    def at_row(self: T, row: Integral) -> T:
+    def r(self: T, row: Integral) -> T:
+        """Target the cell at `row` for this object."""
         return evolve(self, row=row)
 
     @lru_cache(maxsize=None)
-    def at_col(self: T, col: Integral) -> T:
+    def c(self: T, col: Integral) -> T:
+        """Target the cell at `col` for this object."""
         return evolve(self, col=col)
+
+
+@attrs(auto_attribs=True)
+class RelativePosition(Trait):
+    """Commands with this trait target a cell relative to the current cell."""
+    row: Integral = 0
+    col: Integral = 0
+
+    @lru_cache(maxsize=None)
+    def r(self: T, delta_row: Integral) -> T:
+        """Specify a target `delta_row`s away from current position for this object."""
+        return evolve(self, row=delta_row)
+
+    @lru_cache(maxsize=None)
+    def c(self: T, delta_col: Integral) -> T:
+        """Specify a target `delta_col`s away from current position for this object."""
+        return evolve(self, col=delta_col)
 
 
 @attrs(auto_attribs=True)
@@ -65,41 +86,35 @@ class Range(Trait):
             Top left corner of the bounding box.
         bottom_right_point: Union[str, Integral, Coords]
             Bottom right corner of the bounding box.
-
-    Notes:
-        For both `top_left_point` and `bottom_right_point`, the types
-        define how to locate the target cell:
-            If it's a string, this will be the save point name at which the save occurs.
-            If it's an Integral
-                If positive: this will be last n-th visited cell.
-                If negative: this will be last n-th position in save stack which
-                    will be retrieved without popping it from the stack.
-                If zero, current cell will be the target.
-            If it's Coords, it will be the absolute coords of the cell.
         """
     top_left_point: CellPointer = 0
     bottom_right_point: CellPointer = 0
 
     def top_left(self, point: CellPointer):
+        """Specify top left corner `point` for this object.
+
+        If it's a string, this will be the save point name at which the save occurs.
+        If it's an Integral
+            If positive: this will be last n-th visited cell.
+            If negative: this will be last n-th position in save stack which
+                will be retrieved without popping it from the stack.
+            If zero, current cell will be the target.
+        If it's Coords, it will be the absolute coords of the cell.
+        """
         return evolve(self, top_left_point=point)
 
     def bottom_right(self, point: CellPointer):
+        """Specify bottom right corner `point` for this object.
+
+        If it's a string, this will be the save point name at which the save occurs.
+        If it's an Integral
+            If positive: this will be last n-th visited cell.
+            If negative: this will be last n-th position in save stack which
+                will be retrieved without popping it from the stack.
+            If zero, current cell will be the target.
+        If it's Coords, it will be the absolute coords of the cell.
+        """
         return evolve(self, bottom_right_point=point)
-
-
-@attrs(auto_attribs=True)
-class RelativeMove(Trait):
-    """Commands with this trait target a cell relative to the current cell."""
-    delta_row: Integral = 0
-    delta_col: Integral = 0
-
-    @lru_cache(maxsize=None)
-    def r(self: T, delta_row: Integral) -> T:
-        return evolve(self, delta_row=delta_row)
-
-    @lru_cache(maxsize=None)
-    def c(self: T, delta_col: Integral) -> T:
-        return evolve(self, delta_col=delta_col)
 
 
 @attrs(auto_attribs=True)
@@ -108,22 +123,27 @@ class Data(Trait):
     data: Any = ""
 
     def with_data(self: T, data: Any) -> T:
+        """Specify the `data` for this object."""
         return evolve(self, data=data)
 
 
 @attrs(auto_attribs=True)
 class Format(Trait):
-    """Commands with this trait provide some `format` to the function for writing."""
+    """Commands with this trait provide some `format_` to the function for writing."""
     FALLBACK_FORMAT: ClassVar[FormatDict] = FormatsNamespace.default_font
-    set_format: Optional[FormatDict] = attrib(default=None)
+    set_format: Optional[FormatDict] = attrib(default=None, repr=False)
 
     def with_format(self: T, format_) -> T:
+        """Specify the `format` for this object."""
         return evolve(self, set_format=self.format_ | format_)
 
     def ensure_format(self, handler: FormatHandler):
+        """Not for public use; inject this format into the workbook using format `handler`."""
         return handler.verify_format(self.format_)
 
     def set_default_font(self: T, format_):
+        """Set the default font globally for the entire project.
+        This format will be used in absence of `set_format` and all formats later will derive from it."""
         self.__class__.FALLBACK_FORMAT = FormatDict(format_)
 
     @property
@@ -137,15 +157,17 @@ class NamedPoint(Trait):
     point_name: str = "__DEFAULT"
 
     def at(self: T, point_name) -> T:
+        """Specify the `point_name` for this object."""
         return evolve(self, point_name=point_name)
 
 
 @attrs(auto_attribs=True)
 class ForwardRef(Trait):
     """Commands with this trait manage a list of forward array references."""
-    resolved_refs: Dict[str, str] = Factory(dict)
+    resolved_refs: Dict[str, str] = attrib(factory=dict, repr=False)
 
     def inject_refs(self: T, ref_array) -> T:
+        """Not for public use; inject the `ref_array` into this object."""
         return evolve(self, resolved_refs=ref_array)
 
 
@@ -154,4 +176,5 @@ class ExecutableCommand(Trait):
 
     @abstractmethod
     def execute(self, target: WorksheetTriplet, coords: Coords):
+        """Not for public use; execute the command at `coords` in `target`."""
         raise NotImplemented

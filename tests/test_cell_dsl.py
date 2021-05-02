@@ -7,12 +7,13 @@ from xlsxwriter.chart_bar import ChartBar
 from xlsxwriter.chart_line import ChartLine
 
 from xlsxwriter_celldsl import FormatsNamespace as F
-from xlsxwriter_celldsl.cell_dsl import CellDSLError, ExecutorHelper, cell_dsl_context
-from xlsxwriter_celldsl.ops import AddBarChart, AddLineChart, AtCell, BacktrackCell, DefineNamedRange, ImposeFormat, \
+from xlsxwriter_celldsl.cell_dsl import CellDSLError, ExecutorHelper, MovementCellDSLError, cell_dsl_context
+from xlsxwriter_celldsl.ops import AddBarChart, AddLineChart, AtCell, BacktrackCell, DefineNamedRange, DrawBoxBorder, \
+    ImposeFormat, \
     Load, MergeWrite, \
     Move, \
     OverrideFormat, RefArray, Save, \
-    StackLoad, \
+    SectionBegin, SectionEnd, StackLoad, \
     StackSave, Write, \
     WriteRich
 from xlsxwriter_celldsl.utils import WorkbookPair, chain_rich
@@ -73,10 +74,6 @@ class TestExecutorHelper:
             ])
         ]
 
-    def test_format_nonformat_error(self):
-        with raises(CellDSLError):
-            self.commit([F.default_font, None])
-
 
 @fixture
 def ws_mock():
@@ -100,11 +97,6 @@ class TestCellDSL:
 
         spy.assert_any_call(0, 0, 'Alpha', ws_mock.fmt.verify_format(F.default_font))
         spy.assert_any_call(1, 1, 'Beta', ws_mock.fmt.verify_format(F.default_font_centered))
-
-    def test_write_fail(self, ws_mock):
-        with raises(CellDSLError):
-            with cell_dsl_context(ws_mock) as E:
-                E.commit([7, "Out of bounds write"])
 
     def test_merge_write(self, ws_mock, mocker):
         spy = mocker.spy(ws_mock.ws, 'merge_range')
@@ -175,7 +167,7 @@ class TestCellDSL:
                 # Backtracking
                 BacktrackCell.rewind(2), Write.with_data("9, 5"),
                 # Go-to
-                AtCell.at_col(100).at_row(256), Write.with_data("256, 100")
+                AtCell.c(100).r(256), Write.with_data("256, 100")
             ])
 
         fmt = ws_mock.fmt.verify_format(F.default_font)
@@ -201,13 +193,13 @@ class TestCellDSL:
                 DefineNamedRange
                     .with_name("A1_D1")
                     .top_left(1),
-                AtCell.at_row(10).at_col(10), StackSave,
-                AtCell.at_row(0).at_col(0),
+                AtCell.r(10).c(10), StackSave,
+                AtCell.r(0).c(0),
                 DefineNamedRange
                     .with_name("A1_K11")
                     .bottom_right(-1),
-                AtCell.at_row(5).at_col(5), Save.at("TestRange"),
-                AtCell.at_row(0).at_col(0),
+                AtCell.r(5).c(5), Save.at("TestRange"),
+                AtCell.r(0).c(0),
                 DefineNamedRange
                     .with_name("A1_F6")
                     .bottom_right("TestRange"),
@@ -260,3 +252,110 @@ class TestCellDSL:
 
         spy_ws.assert_any_call(0, 2, ANY)
         spy_ws.assert_any_call(0, 3, ANY)
+
+
+class TestCellDSLErrors:
+    def test_format_nonformat_error(self):
+        with raises(CellDSLError, match="Format shortcut must be followed"):
+            e = ExecutorHelper()
+            e.commit([F.default_font, None])
+
+    def test_negative_coords(self, ws_mock):
+        with raises(MovementCellDSLError, match="Illegal coords"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([7])
+
+    def test_beyond_limit_coords_row(self, ws_mock):
+        with raises(MovementCellDSLError, match="Illegal coords"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([AtCell.r(10000000000)])
+
+    def test_beyond_limit_coords_col(self, ws_mock):
+        with raises(MovementCellDSLError, match="Illegal coords"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([AtCell.c(10000000000)])
+
+    def test_nonexistent_save_point(self, ws_mock):
+        with raises(MovementCellDSLError, match="Save point TYPO SAVE"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([Save.at("SAVE POINT 1"), 6, Save.at("SAVE POINT 2"), 6, Load.at("TYPO SAVE")])
+
+    def test_backtrack_too_far(self, ws_mock):
+        with raises(MovementCellDSLError, match="backtrack 100"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([Write.with_data("alpha"), 6, Write.with_data("beta"), 6, BacktrackCell.rewind(100)])
+
+    def test_load_from_empty_save_stack(self, ws_mock):
+        with raises(MovementCellDSLError, match="is empty"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([StackLoad])
+
+    def test_range_fail_11(self, ws_mock):
+        with raises(MovementCellDSLError, match="Top left corner would use 100"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([DrawBoxBorder.top_left(100)])
+
+    def test_range_fail_12(self, ws_mock):
+        with raises(MovementCellDSLError, match="Top left corner would look 100"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([DrawBoxBorder.top_left(-100)])
+
+    def test_range_fail_21(self, ws_mock):
+        with raises(MovementCellDSLError, match="Bottom right corner would use 100"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([DrawBoxBorder.bottom_right(100)])
+
+    def test_range_fail_22(self, ws_mock):
+        with raises(MovementCellDSLError, match="Bottom right corner would look 100"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([DrawBoxBorder.bottom_right(-100)])
+
+    def test_range_fail_31(self, ws_mock):
+        with raises(CellDSLError, match="Tried to use a save point named FAIL for top left"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([DrawBoxBorder.top_left("FAIL")])
+
+    def test_range_fail_32(self, ws_mock):
+        with raises(CellDSLError, match="Tried to use a save point named FAIL for bottom right"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([DrawBoxBorder.bottom_right("FAIL")])
+
+    def test_double_overwrite_format(self, ws_mock):
+        with raises(CellDSLError, match="There's already an OverrideFormat for cell"):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([OverrideFormat.with_format(F.default_font), OverrideFormat.with_format(F.default_font_bold)])
+
+    def test_name_stack_tracking_basic(self, ws_mock):
+        with raises(MovementCellDSLError, match='Illegal coords') as exc:
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([SectionBegin.with_name("Section1"), 7])
+
+        assert "Name stack: ['Section1']" in str(exc.value)
+
+    def test_name_stack_tracking_advanced(self, ws_mock):
+        with raises(MovementCellDSLError, match='Illegal coords') as exc:
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([
+                    SectionBegin.with_name("Section1"), [
+                        SectionBegin.with_name("Section2"), [
+                            SectionBegin.with_name("Section3"),
+                            SectionEnd,
+                        ],
+                        7
+                    ]
+                ])
+
+        assert "Name stack: ['Section2', 'Section1']" in str(exc.value)
+
+    def test_non_empty_name_stack(self, ws_mock):
+        with raises(MovementCellDSLError, match='Name stack is not empty') as exc:
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([
+                    SectionBegin.with_name("Section1"), [
+                        SectionBegin.with_name("Section2"),
+                        66,
+                        SectionEnd
+                    ]
+                ])
+
+        assert "Name stack: ['Section1']" in str(exc.value)

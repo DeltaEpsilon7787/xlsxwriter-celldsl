@@ -1,6 +1,8 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 from contextlib import contextmanager
+from itertools import groupby
 from operator import itemgetter
+from pprint import pformat
 from typing import ContextManager, DefaultDict, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast
 from warnings import warn
 
@@ -28,8 +30,54 @@ CommitTypes = Union[
 ]
 
 
+def name_stack_repr(name_stack):
+    segments = []
+    for name, group in groupby(name_stack):
+        group_len = len([*group])
+        segments.append(group_len > 1 and f"{name}x{group_len}" or name)
+    return segments[::-1]
+
+
 class CellDSLError(Exception):
-    pass
+    """Base Cell DSL error"""
+
+    def __init__(self, message, action_num=None, action_lst=None, name_stack=None, action=None, save_points=None):
+        self.message = message
+        self.action_num = action_num
+        self.action_lst = action_lst
+        self.name_stack = name_stack
+        self.action = action
+        self.save_points = save_points
+
+    def __str__(self):
+        segments = []
+        if self.name_stack is not None:
+            segments.append(f"Name stack: {pformat(name_stack_repr(self.name_stack))}")
+        if self.action_lst is not None and self.action_num is not None:
+            segments.append(
+                f"Adjacent actions: {pformat(self.action_lst[max(self.action_num - 10, 0):self.action_num + 10])}"
+            )
+        if self.action_num is not None:
+            segments.append(f"Action num: {pformat(self.action_num)}")
+        if self.action is not None:
+            segments.append(f"Triggering action: {self.action}")
+        if self.save_points is not None:
+            segments.append(f"Save points already present: {pformat(self.save_points)}")
+        additional_info = "\n".join(segments)
+
+        full_message = [self.message]
+        if additional_info:
+            full_message.append(f"Additional info:\n{additional_info}")
+
+        return "\n".join(full_message)
+
+
+class MovementCellDSLError(CellDSLError):
+    """A Cell DSL error triggered by invalid movement"""
+
+
+class ExecutionCellDSLError(Exception):
+    """A Cell DSL error triggered by an exception during execution."""
 
 
 @attrs(auto_attribs=True)
@@ -99,30 +147,42 @@ class StatReceiver(object):
 def _process_movement(action_list, row, col) -> Tuple[DefaultDict[Coords, List[ops.Command]], Dict[str, Coords]]:
     result = defaultdict(list)
     save_points = {}
+    save_stack = deque()
+    name_stack = deque()
 
     visited = [(row, col)]
-    save_stack = []
+
+    def trigger_movement_error(message, exc=None):
+        raise MovementCellDSLError(
+            message,
+            action_num,
+            action_list,
+            name_stack,
+            action,
+            save_points
+        ) from exc
+
     for action_num, action in enumerate(action_list):
         action_type = type(action)
         if action_type is ops.LoadOp:
             try:
                 row, col = save_points[action.point_name]
             except KeyError as e:
-                raise CellDSLError(f'Save point {action.point_name} does not exist.') from e
+                trigger_movement_error(f'Save point {action.point_name} does not exist.', e)
             visited.append((row, col))
         elif action_type is ops.StackLoadOp:
             try:
                 row, col = save_stack.pop()
             except IndexError as e:
-                raise CellDSLError(f'Save stack is empty.') from e
+                trigger_movement_error(f'Save stack is empty.', e)
             visited.append((row, col))
         elif action_type is ops.SaveOp:
             save_points[action.point_name] = (row, col)
         elif action_type is ops.StackSaveOp:
             save_stack.append((row, col))
         elif action_type is ops.MoveOp:
-            row += action.delta_row
-            col += action.delta_col
+            row += action.row
+            col += action.col
             visited.append((row, col))
         elif action_type is ops.AtCellOp:
             row = action.row
@@ -133,27 +193,66 @@ def _process_movement(action_list, row, col) -> Tuple[DefaultDict[Coords, List[o
                 for _ in range(action.n + 1):
                     row, col = visited.pop()
             except IndexError as e:
-                raise CellDSLError(f'Could not backtrack {action.n} cells.') from e
+                trigger_movement_error(f'Could not backtrack {action.n} cells.', e)
         else:
             if isinstance(action, Range):
                 if isinstance(action.top_left_point, int):
                     if action.top_left_point > 0:
-                        action = action.top_left(visited[-action.top_left_point - 1])
+                        try:
+                            action = action.top_left(visited[-action.top_left_point - 1])
+                        except IndexError as e:
+                            trigger_movement_error(
+                                f'Top left corner would use {action.top_left_point} last visited cell, but only '
+                                f'{len(visited)} cells have been visited',
+                                e
+                            )
                     elif action.top_left_point < 0:
-                        action = action.top_left(save_stack[action.top_left_point])
+                        try:
+                            action = action.top_left(save_stack[action.top_left_point])
+                        except IndexError as e:
+                            trigger_movement_error(
+                                f'Top left corner would look {-action.top_left_point} positions'
+                                f'up the save stack, but there is only '
+                                f'{len(save_stack)} saves',
+                                e
+                            )
                     else:
                         action = action.top_left((row, col))
                 if isinstance(action.bottom_right_point, int):
                     if action.bottom_right_point > 0:
-                        action = action.bottom_right(visited[-action.bottom_right_point - 1])
+                        try:
+                            action = action.bottom_right(visited[-action.bottom_right_point - 1])
+                        except IndexError as e:
+                            trigger_movement_error(
+                                f'Bottom right corner would use {action.bottom_right_point} last visited cell, but only '
+                                f'{len(visited)} cells have been visited',
+                                e
+                            )
                     elif action.bottom_right_point < 0:
-                        action = action.bottom_right(save_stack[action.bottom_right_point])
+                        try:
+                            action = action.bottom_right(save_stack[action.bottom_right_point])
+                        except IndexError as e:
+                            trigger_movement_error(
+                                f'Bottom right corner would look {-action.bottom_right_point} positions'
+                                f'up the save stack, but there is only '
+                                f'{len(save_stack)} saves',
+                                e
+                            )
                     else:
                         action = action.bottom_right((row, col))
+            elif action_type is ops.SectionBeginOp:
+                name_stack.append(action.name)
+            elif action_type is ops.SectionEndOp:
+                name_stack.pop()
+
             result[(row, col)].append(action)
 
-        if row < 0 or col < 0:
-            raise CellDSLError(f'Illegal coords have been reached, this is not allowed.')
+        # 2^20 and 2^14 are Excel limits for the amount of row and columns respectively.
+        if row not in range(0, 2 ** 20) or col not in range(0, 2 ** 14):
+            trigger_movement_error(f'Illegal coords have been reached, this is not allowed.')
+
+    if len(name_stack) > 0:
+        raise trigger_movement_error(f'Name stack is not empty, every SectionBegin must be matched with SectionEnd')
 
     return result, save_points
 
@@ -162,13 +261,30 @@ def _inject_coords(coord_action_map, save_points) -> Tuple[DefaultDict[Coords, L
     result = defaultdict(list)
     ref_array = {}
 
+    def trigger_cell_dsl_error(message, exc=None):
+        raise CellDSLError(message, action=action, save_points=save_points) from exc
+
     for coords, actions in coord_action_map.items():
         for action in actions:
             if isinstance(action, Range):
                 if isinstance(action.top_left_point, str):
-                    action = action.top_left(save_points[action.top_left_point])
+                    try:
+                        action = action.top_left(save_points[action.top_left_point])
+                    except KeyError as e:
+                        trigger_cell_dsl_error(
+                            f"Tried to use a save point named {action.top_left_point} "
+                            f"for top left corner, but it doesn't exist",
+                            e
+                        )
                 if isinstance(action.bottom_right_point, str):
-                    action = action.bottom_right(save_points[action.bottom_right_point])
+                    try:
+                        action = action.bottom_right(save_points[action.bottom_right_point])
+                    except KeyError as e:
+                        trigger_cell_dsl_error(
+                            f"Tried to use a save point named {action.bottom_right_point} "
+                            f"for bottom right corner, but it doesn't exist",
+                            e
+                        )
 
             if isinstance(action, ops.RefArrayOp):
                 c = xl_range_abs(*action.top_left_point, *action.bottom_right_point)
@@ -267,6 +383,9 @@ def _expand_drawing(coord_action_map):
 def _override_applier(coord_action_map):
     result = []
 
+    def trigger_cell_dsl_error(message, exc=None):
+        raise CellDSLError(message, action=action) from exc
+
     for key, actions in coord_action_map.items():
         transformed_actions = []
 
@@ -281,7 +400,7 @@ def _override_applier(coord_action_map):
                 imposition_focus.update(action.format_)
             elif isinstance(action, ops.OverrideFormatOp):
                 if override_focus is not None:
-                    raise CellDSLError(f"There's already an OverrideFormat for cell {key}")
+                    trigger_cell_dsl_error(f"There's already an OverrideFormat for cell {key}")
                 override_focus = action
             else:
                 if isinstance(action, (ops.WriteOp, ops.MergeWriteOp)):
@@ -459,6 +578,7 @@ def cell_dsl_context(
     yield helper
 
     coord_action_pairs, save_points = _process_chain(helper.action_chain, initial_row, initial_col)
+    name_stack = deque()
 
     try:
         cell_dsl_context.hbreaks
@@ -470,20 +590,31 @@ def cell_dsl_context(
     except AttributeError:
         cell_dsl_context.vbreaks = set()
 
-    for action_num, (coords, action) in enumerate(coord_action_pairs):
-        if isinstance(action, ops.SubmitHPagebreakOp):
-            cell_dsl_context.hbreaks.add(coords[0])
-        elif isinstance(action, ops.SubmitVPagebreakOp):
-            cell_dsl_context.vbreaks.add(coords[1])
-        elif isinstance(action, ops.ApplyPagebreaksOp):
-            target.ws.set_h_pagebreaks([*cell_dsl_context.hbreaks])
-            target.ws.set_v_pagebreaks([*cell_dsl_context.vbreaks])
-            cell_dsl_context.hbreaks.clear()
-            cell_dsl_context.vbreaks.clear()
-        elif isinstance(action, ExecutableCommand):
-            action.execute(target, coords)
-        else:
-            raise CellDSLError(f'Unknown action of type {type(action)}: {action}')
+    def trigger_execution_error(message):
+        raise ExecutionCellDSLError(message, action_num, None, name_stack, action, save_points)
+
+    try:
+        for action_num, (coords, action) in enumerate(coord_action_pairs):
+            action_type = type(action)
+            if action_type is ops.SubmitHPagebreakOp:
+                cell_dsl_context.hbreaks.add(coords[0])
+            elif action_type is ops.SubmitVPagebreakOp:
+                cell_dsl_context.vbreaks.add(coords[1])
+            elif action_type is ops.ApplyPagebreaksOp:
+                target.ws.set_h_pagebreaks([*cell_dsl_context.hbreaks])
+                target.ws.set_v_pagebreaks([*cell_dsl_context.vbreaks])
+                cell_dsl_context.hbreaks.clear()
+                cell_dsl_context.vbreaks.clear()
+            elif action_type is ops.SectionBeginOp:
+                name_stack.append(action.name)
+            elif action_type is ops.SectionEndOp:
+                name_stack.pop()
+            elif isinstance(action, ExecutableCommand):
+                action.execute(target, coords)
+            else:
+                raise TypeError(f'Unknown action of type {type(action)}: {action}')
+    except CellDSLError as e:
+        trigger_execution_error(e.message)
 
     if stat_receiver is not None:
         # We need to insert an implicit first action of moving over to
