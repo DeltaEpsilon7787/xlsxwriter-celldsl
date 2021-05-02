@@ -41,7 +41,7 @@ arrow keys into the next position.
   repeated key-value pairs.
 * `FormatHandler`: Delegate keeping track of added formats to XlsxWriter-CellDSL and remove the need to distribute
   references to added formats between generating functions.
-* `SaveOp`, `LoadOp`:Give current position a name and then jump back to it later or use it to retrieve the absolute
+* `SaveOp`, `LoadOp`: Give current position a name and then jump back to it later or use it to retrieve the absolute
   coordinates of some point of interest after the script is executed.
 * `StackSaveOp`, `StackLoadOp`: A structure composed of substructures would want to take advantage of `SaveOp`
   capabilities without having to generate a name for it.
@@ -99,24 +99,24 @@ with cell_dsl_context(ws_triplet) as E:
     # to be done and performs some preprocessing on them
     # See the docs for `ExecutorHelper.commit`
     E.commit([
-        # xlsxwriter_celldsl.ops exports both command classes and basic instances of those classes.
-        # ExecutorHelper.commit uses instances.
-        # All commands are immutable objects, however, they are cached and reused
-        #   so few new instances are created.
-        ops.Write
-            .with_data("Hello, world, at A1, using left aligned Liberation Sans 10 (default font)!")
-            .with_format(F.default_font),
-        ops.Move.c(3),  # Move three columns to the right
-        "Wow, short form of ops.Write.with_data('this string'), at D1, three columns away from A1!",
-        11,  # Short form of ops.Move, refer to ExecutorHelper.commit to see how this works
-        F.default_font_bold, "Wow, I'm at B3 now, written in bold", 2,
-        [
-            [
-                [
-                  "However deeply I'm nested, I will be reached anyway, at B4"
-                ]
-            ]
-        ], 6,
+      # xlsxwriter_celldsl.ops exports both command classes and basic instances of those classes.
+      # ExecutorHelper.commit uses instances.
+      # All commands are immutable objects, however, they are cached and reused
+      #   so few new instances are created.
+      ops.Write
+          .with_data("Hello, world, at A1, using left aligned Liberation Sans 10 (default font)!")
+          .with_format(F.default_font),
+      ops.Move.c(3),  # Move three columns to the right
+      "Wow, short form of ops.Write.with_data('this string'), at D1, three columns away from A1!",
+      11,  # Short form of ops.Move, refer to ExecutorHelper.commit to see how this works
+      F.default_font_bold, "Wow, I'm at B3 now, written in bold", 2,
+      [
+          [
+              [
+                "However deeply I'm nested, I will be reached anyway, at B4"
+              ]
+          ]
+      ], 6,
       # Rich string short form, several formats within a single text cell
       F.default_font, "A single cell, but two parts, first half normal ",
       F.default_font_bold, "but second half bold! For as long as we stay at C4...", 6,
