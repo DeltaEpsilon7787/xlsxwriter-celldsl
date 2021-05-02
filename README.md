@@ -77,7 +77,6 @@ import xlsxwriter_celldsl as cell_dsl
 # Usage example
 
 ```py
-import utils
 from xlsxwriter import Workbook
 
 # Various operations
@@ -168,7 +167,7 @@ with cell_dsl_context(ws_triplet) as E:
         ops.SectionEnd,
         # ...however you can skip that by using utils.segment to implicitly add SectionBegin and SectionEnd to
         #   a piece of code
-        utils.segment("Empty segment", [])
+        segment("Empty segment", [])
       ]
     ])
 ```

@@ -11,7 +11,6 @@ with open("./README.md", encoding='utf-8') as in_:
         author_email='deltaepsilon7787@gmail.com',
         description='A library to write scripts for generating Excel files using XlsxWriter in a more structured '
                     'manner via a DSL and taking advantage of constant_memory mode easily.',
-        description_content_type="text/plain",
         long_description=in_.read(),
         long_description_content_type="text/markdown",
         install_requires=[
