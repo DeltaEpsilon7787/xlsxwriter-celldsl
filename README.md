@@ -50,6 +50,9 @@ arrow keys into the next position.
 * `ImposeFormatOp`, `OverrideFormatOp`, `DrawBoxBorderOp`: Deferred execution of operations allows additional formatting
   to be applied to writing actions after they occur which would ordinarily require changing the arguments of the first
   writing function call.
+* `SectionBeginOp`, `SectionEndOp`: Errors are inevitable and though deferred execution makes debugging more difficult,
+  this needn't be the case if you annotate segments with names.
+* Exceptions provide a lot of useful information to track down the line that causes it.
 * Several short forms of common operations improve conciseness of code.
 * Deferred execution of operations allows taking advantage of `constant_memory` mode in XlsxWriter easily, without
   having to contend with write-to-stream limitations such as ensuring the writes occurs in left-to-right, top-to-bottom
@@ -74,6 +77,7 @@ import xlsxwriter_celldsl as cell_dsl
 # Usage example
 
 ```py
+import utils
 from xlsxwriter import Workbook
 
 # Various operations
@@ -85,7 +89,7 @@ from xlsxwriter_celldsl import WorkbookPair
 # A number of basic formats
 from xlsxwriter_celldsl.formats import FormatsNamespace as F
 # Useful functions to assist in printing sequences
-from xlsxwriter_celldsl.utils import row_chain, col_chain
+from xlsxwriter_celldsl.utils import row_chain, col_chain, segment
 
 wb = Workbook('out.xlsx')
 wb_pair = WorkbookPair.from_wb(wb)
@@ -110,51 +114,71 @@ with cell_dsl_context(ws_triplet) as E:
         [
             [
                 [
-                    "However deeply I'm nested, I will be reached anyway, at B4"
+                  "However deeply I'm nested, I will be reached anyway, at B4"
                 ]
             ]
         ], 6,
-        # Rich string short form, several formats within a single text cell
-        F.default_font, "A single cell, but two parts, first half normal ",
-        F.default_font_bold, "but second half bold! For as long as we stay at C4...", 6,
-        "Oops, D4 now",
-        # Saving current position as "see you later"
-        ops.Save.at("see you later"),
-        # Absolute coordinate jump
-        ops.AtCell.at_row(49).at_col(1), "Jumping all the way to B50",
-        # Jumping to some previously saved position
-        ops.Load.at("see you later"), 6, "We've gone back to D4, moved right and now it's E4",
-        3333,
-        ops.Save.at("Bottom Right Corner"),
-        # Reversing movement back in time
-        ops.BacktrackCell.rewind(1),
-        # Drawing a box using borders
-        ops.DrawBoxBorder.bottom_right("Bottom Right Corner"), 33,
-        # Two formats may be "merged" together using OR operator
-        # In this case, we add "wrapped" trait to default font
-        F.default_font | F.wrapped, "And now, we're inside a 5x5 box, starting at E4, but this is G6."
-        "Even though this operation precedes the next one, the next one affect this cell"
-        ", thus we are inside a smaller box that only encloses G6.",
-        ops.DrawBoxBorder,
-        ops.AtCell.at_row(10).at_col(0),
+      # Rich string short form, several formats within a single text cell
+      F.default_font, "A single cell, but two parts, first half normal ",
+      F.default_font_bold, "but second half bold! For as long as we stay at C4...", 6,
+      "Oops, D4 now",
+      # Saving current position as "see you later"
+      ops.Save.at("see you later"),
+      # Absolute coordinate jump
+      ops.AtCell.r(49).c(1), "Jumping all the way to B50",
+      # Jumping to some previously saved position
+      ops.Load.at("see you later"), 6, "We've gone back to D4, moved right and now it's E4",
+      3333,
+      ops.Save.at("Bottom Right Corner"),
+      # Reversing movement back in time
+      ops.BacktrackCell.rewind(1),
+      # Drawing a box using borders
+      ops.DrawBoxBorder.bottom_right("Bottom Right Corner"), 33,
+      # Two formats may be "merged" together using OR operator
+      # In this case, we add "wrapped" trait to default font
+      F.default_font | F.wrapped, "And now, we're inside a 5x5 box, starting at E4, but this is G6."
+                                  "Even though this operation precedes the next one, the next one affect this cell"
+                                  ", thus we are inside a smaller box that only encloses G6.",
+      ops.DrawBoxBorder,
+      ops.AtCell.r(10).c(0),
+      # Sections allow you to document your code segments by giving them names
+      #   and also assist in debugging as you will be shown the name stack
+      #     up until the line that causes the exception
+      ops.SectionBegin.with_name("Multiplication table"), [
         # col_chain / row_chain write data sequentially from an iterable
-        # row_chain prints it in a row, but the actual position of the cursor doesn't change!
+        # row_chain prints it in a row, but the actual position of the cursor doesn't change!            
         "A sequence from 1 to 9, horizontally", 6, row_chain([
-            f"* {v}"
-            for v in range(1, 10)
+          f"* {v}"
+          for v in range(1, 10)
         ]), 1,
         # col_chain prints it in a column
         "A sequence from 1 to 9, vertically", 2, col_chain([
-            f"{v} *"
-            for v in range(1, 10)
+          f"{v} *"
+          for v in range(1, 10)
         ]), 6,
         # Nothing stops you from chaining chains
         col_chain([
-            row_chain([
-                ops.Write.with_data(a * b)
-                for b in range(1, 10)
-            ])
-            for a in range(1, 10)
-        ])
+          row_chain([
+            ops.Write.with_data(a * b)
+            for b in range(1, 10)
+          ])
+          for a in range(1, 10)
+        ]),
+        # Every SectionBegin must be matched with a SectionEnd
+        ops.SectionEnd,
+        # ...however you can skip that by using utils.segment to implicitly add SectionBegin and SectionEnd to
+        #   a piece of code
+        utils.segment("Empty segment", [])
+      ]
     ])
 ```
+
+# Changelog
+
+## 0.2.0
+
+* Add `SectionBeginOp` and `SectionEndOp`
+* Improvement to error reporting: now they provide some context
+* Remove format data from repr of commands
+* Separate `CellDSLError` into `MovementCellDSLError` and `ExecutionCellDSLError`
+* Raise exceptions on various error that may occur from XlsxWriter side (use proper exceptions instead of return codes)
