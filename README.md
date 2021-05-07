@@ -1,11 +1,13 @@
-# What is XlsxWriter-CellDSL?
+# XlsxWriter-CellDSL
+
+## What is this?
 
 **XlsxWriter-CellDSL** is a complementary Python module for the
 excellent [XlsxWriter](https://github.com/jmcnamara/XlsxWriter) library that provides a DSL (domain specific language)
 to perform common operations in worksheets without having to specify absolute coordinates and keep track of them,
 instead opting to use primarily relative movement of an imaginary "cursor" within the spreadsheet, among other things.
 
-# The issue with absolute coordinates
+## The issue with absolute coordinates
 
 If you've ever written code that generates structures that have a dynamic layout in Excel, you may have noticed that, in
 order to make sure writes happen in correct cells, you have to carry data that have been used to figure out the size of
@@ -33,7 +35,7 @@ suited for and this module implements a number of utilities that allow the devel
 placed somewhere a worksheet and operations being performed wherever this cursor is, followed by moving the cursor with
 arrow keys into the next position.
 
-# Features and uses
+## Features and uses
 
 * `MoveOp`: Move the cursor around using relative coordinates.
 * `AtCellOp`: Perform an absolute coordinate jump if no other movement option suffices.
@@ -52,6 +54,8 @@ arrow keys into the next position.
   writing function call.
 * `SectionBeginOp`, `SectionEndOp`: Errors are inevitable and though deferred execution makes debugging more difficult,
   this needn't be the case if you annotate segments with names.
+* `AddChartOp`: Add charts to the worksheet and utilize the flexibility of named ranges in an environment which does not
+  allow named ranges with `RefArrayOp`.
 * Exceptions provide a lot of useful information to track down the line that causes it.
 * Several short forms of common operations improve conciseness of code.
 * Deferred execution of operations allows taking advantage of `constant_memory` mode in XlsxWriter easily, without
@@ -59,22 +63,13 @@ arrow keys into the next position.
   order only, thus providing the performance of `constant_memory` mode, but flexibility of regular mode.
 * Deferred execution allows introspection into the action chain and modifying it out-of-order.
 * Upon execution, history of operations can be saved and used in scripts further down.
+* Avoid more bugs by preventing overwriting data over non-emtpy cells with `overwrites_ok` attribute.
 
-# Installation and importing
+## Documentation
 
-Installation:
+Read the full documentation [here](https://xlsxwriter-celldsl.readthedocs.io/en/latest/).
 
-```sh 
-$ pip install xlsxwriter-celldsl
-```
-
-Importing the module:
-
-```py
-import xlsxwriter_celldsl as cell_dsl
-```
-
-# Usage example
+## Usage example
 
 ```py
 from xlsxwriter import Workbook
@@ -173,6 +168,13 @@ with cell_dsl_context(ws_triplet) as E:
 ```
 
 # Changelog
+
+## 0.3.0
+
+* Add `overwrites_ok`
+* Docs!
+* Removed dummy_cell_dsl_context
+* Complete overhaul to `AddChartOp`, removing the string function name interface
 
 ## 0.2.0
 
