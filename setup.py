@@ -13,12 +13,12 @@ with open("./README.md", encoding='utf-8') as in_:
                     'manner by avoiding dealing with absolute coordinates.',
         long_description=in_.read(),
         long_description_content_type="text/markdown",
+        python_requires='>=3.6',
         install_requires=[
             "attrs",
             "xlsxwriter",
         ],
         extras_require={
-            'docs': ['sphinx', 'sphinx-bootstrap-theme'],
-            'tests': ['pytest', 'pytest-mock']
+            'testing': ['pytest', 'pytest-mock']
         },
     )
