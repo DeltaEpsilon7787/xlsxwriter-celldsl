@@ -1,1 +1,3 @@
+attrs
+xlsxwriter
 sphinx-bootstrap-theme
