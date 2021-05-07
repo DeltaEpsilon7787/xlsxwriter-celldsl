@@ -17,4 +17,6 @@ with open("./README.md", encoding='utf-8') as in_:
             "attrs",
             "xlsxwriter",
         ],
+        setup_requires=['pytest-runner', 'sphinx-bootstrap-theme'],
+        tests_require=['pytest']
     )

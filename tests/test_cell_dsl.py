@@ -1,6 +1,7 @@
 from io import BytesIO
 from unittest.mock import ANY
 
+from _pytest.recwarn import warns
 from pytest import fixture, raises
 from xlsxwriter import Workbook
 
@@ -161,8 +162,9 @@ class TestCellDSL:
     def test_write_rich_degradation(self, ws_mock, mocker):
         spy = mocker.spy(ws_mock.ws, 'write_string')
 
-        with cell_dsl_context(ws_mock) as E:
-            E.commit([WriteRich.with_data("Test")])
+        with warns(UserWarning):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([WriteRich.with_data("Test")])
 
         spy.assert_any_call(0, 0, "Test", ws_mock.fmt.verify_format(F.default_font))
 
