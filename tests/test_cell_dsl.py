@@ -3,11 +3,10 @@ from unittest.mock import ANY
 
 from pytest import fixture, raises
 from xlsxwriter import Workbook
-from xlsxwriter.chart_bar import ChartBar
-from xlsxwriter.chart_line import ChartLine
 
 from xlsxwriter_celldsl import FormatsNamespace as F
-from xlsxwriter_celldsl.cell_dsl import CellDSLError, ExecutorHelper, MovementCellDSLError, cell_dsl_context
+from xlsxwriter_celldsl.cell_dsl import CellDSLError, ExecutionCellDSLError, ExecutorHelper, MovementCellDSLError, \
+    cell_dsl_context
 from xlsxwriter_celldsl.ops import AddBarChart, AddLineChart, AtCell, BacktrackCell, DefineNamedRange, DrawBoxBorder, \
     ImposeFormat, \
     Load, MergeWrite, \
@@ -98,6 +97,19 @@ class TestCellDSL:
         spy.assert_any_call(0, 0, 'Alpha', ws_mock.fmt.verify_format(F.default_font))
         spy.assert_any_call(1, 1, 'Beta', ws_mock.fmt.verify_format(F.default_font_centered))
 
+    def test_specific_write(self, ws_mock, mocker):
+        spy_blank = mocker.spy(ws_mock.ws, 'write_blank')
+        spy_formula = mocker.spy(ws_mock.ws, 'write_formula')
+
+        with cell_dsl_context(ws_mock, overwrites_ok=True) as E:
+            E.commit([
+                Write.with_data_type('blank').with_data('Alpha'),
+                Write.with_data_type('formula').with_data('Beta'),
+            ])
+
+        spy_blank.assert_any_call(0, 0, 'Alpha', ws_mock.fmt.verify_format(F.default_font))
+        spy_formula.assert_any_call(0, 0, 'Beta', ws_mock.fmt.verify_format(F.default_font))
+
     def test_merge_write(self, ws_mock, mocker):
         spy = mocker.spy(ws_mock.ws, 'merge_range')
 
@@ -146,10 +158,18 @@ class TestCellDSL:
             ws_mock.fmt.verify_format(F.default_font | F.center), " Epsilon!"
         )
 
+    def test_write_rich_degradation(self, ws_mock, mocker):
+        spy = mocker.spy(ws_mock.ws, 'write_string')
+
+        with cell_dsl_context(ws_mock) as E:
+            E.commit([WriteRich.with_data("Test")])
+
+        spy.assert_any_call(0, 0, "Test", ws_mock.fmt.verify_format(F.default_font))
+
     def test_movement_fully(self, ws_mock, mocker):
         spy = mocker.spy(ws_mock.ws, 'write')
 
-        with cell_dsl_context(ws_mock, initial_row=10, initial_col=10) as E:
+        with cell_dsl_context(ws_mock, initial_row=10, initial_col=10, overwrites_ok=True) as E:
             E.commit([
                 # Basic movement
                 Write.with_data("10, 10"), 6,
@@ -235,16 +255,18 @@ class TestCellDSL:
         spy_wb = mocker.spy(ws_mock.wb, "add_chart")
         spy_ws = mocker.spy(ws_mock.ws, "insert_chart")
 
-        with cell_dsl_context(ws_mock) as E:
+        with cell_dsl_context(ws_mock, overwrites_ok=True) as E:
             E.commit([
                 Write.with_data(0),
                 Write.with_data(10), 6,
                 Write.with_data(20), 6,
                 RefArray.top_left(2).bottom_right(0).at("ChartTest"),
-                AddBarChart
-                    .do(ChartBar.add_series, ({'values': '=TestSheet!$A$1:$C$1'})), 6,
-                AddLineChart
-                    .do(ChartLine.add_series, ({'values': RefArray.at("ChartTest")})),
+                AddBarChart.do([
+                    AddBarChart.target.add_series({'values': '=TestSheet!$A$1:$C$1'})
+                ]), 6,
+                AddLineChart.do([
+                    AddLineChart.target.add_series({'values': RefArray.at('ChartTest')})
+                ])
             ])
 
         spy_wb.assert_any_call({"type": "bar", "subtype": None})
@@ -359,3 +381,21 @@ class TestCellDSLErrors:
                 ])
 
         assert "Name stack: ['Section1']" in str(exc.value)
+
+    def test_overwrite_protection_same_action(self, ws_mock):
+        with cell_dsl_context(ws_mock) as E:
+            E.commit([
+                "0, 0", 6,
+                F.default_font, "0, 1", 6,
+                "0, 2", 4,
+                F.default_font, "0, 1"
+            ])
+
+        with raises(ExecutionCellDSLError, match=r'Overwrite has occurred at \(0, 1\)'):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([
+                    "0, 0", 6,
+                    F.default_font_centered, "0, 1", 6,
+                    "0, 2", 4,
+                    F.default_font, "0, 1"
+                ])

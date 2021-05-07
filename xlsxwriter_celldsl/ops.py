@@ -1,53 +1,65 @@
 import itertools
-from typing import Any, Callable, ClassVar, Dict, List, Mapping, Optional, Set, Union
+from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, TypeVar
 
 from attr import Factory, attrib, attrs, evolve
+from xlsxwriter.chart_area import ChartArea
+from xlsxwriter.chart_bar import ChartBar
+from xlsxwriter.chart_column import ChartColumn
+from xlsxwriter.chart_doughnut import ChartDoughnut
+from xlsxwriter.chart_line import ChartLine
+from xlsxwriter.chart_pie import ChartPie
+from xlsxwriter.chart_radar import ChartRadar
+from xlsxwriter.chart_scatter import ChartScatter
+from xlsxwriter.chart_stock import ChartStock
 from xlsxwriter.utility import xl_range_formula
 
 from . import traits
 from .formats import FormatDict, FormatsNamespace
 from .utils import WorksheetTriplet
 
+T = TypeVar('T')
+
 
 class Command(object):
     """Base class for all commands."""
+    OVERWRITE_SENSITIVE = False
     pass
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class StackSaveOp(Command):
     """A command to push current location into save stack."""
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class StackLoadOp(Command):
     """A command to pop last location from save stack and jump to it."""
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class LoadOp(Command, traits.NamedPoint):
-    """A command to jump to `at` a save point."""
+    """A command to jump to :func:`at` a save point."""
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class SaveOp(Command, traits.NamedPoint):
-    """A command to save current location `at` memory location."""
+    """A command to save current location :func:`at` memory location."""
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class RefArrayOp(Command, traits.Range, traits.NamedPoint):
-    """A forward reference to an array of cells with the name `name` defined using
-    a rectangle with `top_left` and `bottom_right` specified. This is only used in charts.
+    """A forward reference to an array of cells :func:`with_name` defined using
+    a rectangle with :func:`top_left` and :func:`bottom_right` specified. This is only used in charts.
 
     This is also a marker for such an array, meaning in commands that support forward references,
     you can use RefArray.at('name') to use a reference, which will be replaced
-    with a string like '=SheetName!$C$1:$F$9'."""
+    with a string like ``'=SheetName!$C$1:$F$9'``."""
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class SectionBeginOp(Command):
     """A command that does nothing, but may assist in debugging and documentation
-    of scripts by giving providing segments in script `with_name`.
+    of scripts by giving providing segments in script :func:`with_name`.
 
     During execution, if an error occurs, the surrounding names will be displayed, in order from most
     recent to least recent."""
@@ -58,7 +70,7 @@ class SectionBeginOp(Command):
         return evolve(self, name=name)
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class SectionEndOp(Command):
     """A command that indicates an end of the most recent `SectionBeginOp`."""
 
@@ -72,19 +84,19 @@ SectionBegin = SectionBeginOp()
 SectionEnd = SectionEndOp()
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class MoveOp(Command, traits.RelativePosition):
-    """A command to move `r` rows and `c` columns away from current cell."""
+    """A command to move :func:`r` rows and :func:`c` columns away from current cell."""
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class AtCellOp(Command, traits.AbsolutePosition):
-    """A command to go to a cell `r` and `c`."""
+    """A command to go to a cell :func:`r` and :func:`c`."""
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class BacktrackCellOp(Command):
-    """A command to `rewind` the position back in time. 0 stays in current cell, 1 goes to previous cell..."""
+    """A command to :func:`rewind` the position back in time. 0 stays in current cell, 1 goes to previous cell..."""
     n: int = 0
 
     def rewind(self, n_cells: int):
@@ -96,12 +108,17 @@ AtCell = AtCellOp()
 BacktrackCell = BacktrackCellOp()
 
 
-@attrs(auto_attribs=True, frozen=True)
-class WriteOp(Command, traits.Data, traits.Format, traits.ExecutableCommand):
-    """A command to write to this cell `with_data` and `with_format`."""
+@attrs(auto_attribs=True, frozen=True, order=False)
+class WriteOp(Command, traits.Data, traits.DataType, traits.Format, traits.ExecutableCommand):
+    """A command to write to this cell :func:`with_data` with data :func:`with_data_type` and :func:`with_format`."""
+    OVERWRITE_SENSITIVE = True
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
-        return_code = target.ws.write(*coords, self.data, self.ensure_format(target.fmt))
+        args = *coords, self.data, self.ensure_format(target.fmt)
+        if self.data_type is not None:
+            return_code = getattr(target.ws, f'write_{self.data_type}')(*args)
+        else:
+            return_code = target.ws.write(*args)
 
         if return_code == -2:
             raise ValueError('Write failed because the string is longer than 32k characters')
@@ -113,10 +130,14 @@ class WriteOp(Command, traits.Data, traits.Format, traits.ExecutableCommand):
             raise ValueError('Write failed because there are more than 65530 URLs in the sheet')
 
 
-@attrs(auto_attribs=True, frozen=True)
-class MergeWriteOp(Command, traits.CardinalSize, traits.Data, traits.Format, traits.ExecutableCommand):
-    """A command to merge `with_size` cols starting from current col and write `with_data` and `with_format`
-    into this cell."""
+@attrs(auto_attribs=True, frozen=True, order=False)
+class MergeWriteOp(Command, traits.CardinalSize, traits.Data, traits.DataType, traits.Format, traits.ExecutableCommand):
+    """
+    A command to merge :func:`with_size` cols starting from current col and
+    write :func:`with_data` with data :func:`with_data_type` and :func:`with_format` into this cell.
+    """
+
+    OVERWRITE_SENSITIVE = True
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         return_code = target.ws.merge_range(
@@ -126,6 +147,15 @@ class MergeWriteOp(Command, traits.CardinalSize, traits.Data, traits.Format, tra
             self.data,
             self.ensure_format(target.fmt)
         )
+
+        if self.data_type is not None:
+            # In order to force a data type into a merged cell, we have to perform a second write
+            #   as shown here: <https://xlsxwriter.readthedocs.io/example_merge_rich.html>
+            return_code = getattr(target.ws, f"write_{self.data_type}")(
+                *coords,
+                self.data,
+                self.ensure_format(target.fmt)
+            )
 
         if return_code == -2:
             raise ValueError('Merge write failed because the string is longer than 32k characters')
@@ -137,24 +167,29 @@ class MergeWriteOp(Command, traits.CardinalSize, traits.Data, traits.Format, tra
             raise ValueError('Merge write failed because there are more than 65530 URLs in the sheet')
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand):
-    """A command to write a text run `with_data` and `with_format` to current position, `then` perhaps write some more,
-    optionally `with_default_format`."""
+    """A command to write a text run :func:`with_data` and
+    :func:`with_format` to current position, :func:`then` perhaps write some more,
+    optionally :func:`with_default_format`."""
     default_format: FormatDict = attrib(factory=FormatDict, converter=FormatDict)
     prev_fragment: Optional['WriteRichOp'] = None
+    OVERWRITE_SENSITIVE = True
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         fragments: List[WriteRichOp] = self.rich_chain
-        formats_and_data = itertools.chain.from_iterable(zip((
+        formats_and_data = [*itertools.chain.from_iterable(zip((
             fragment.ensure_format(target.fmt)
             for fragment in fragments
         ), (
             fragment.data
             for fragment in fragments
-        )))
+        )))]
 
         return_code = target.ws.write_rich_string(*coords, *formats_and_data)
+        if return_code == -5:
+            return_code = target.ws.write_string(*coords, formats_and_data[1], formats_and_data[0])
+
         if return_code == -2:
             raise ValueError('Rich write failed because the string is longer than 32k characters')
 
@@ -206,22 +241,22 @@ MergeWrite = MergeWriteOp()
 WriteRich = WriteRichOp()
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class ImposeFormatOp(Command, traits.Format):
-    """A command to append to merge current cell's format `with_format`."""
+    """A command to append to merge current cell's format :func:`with_format`."""
     set_format: FormatDict = attrib(default=FormatsNamespace.base, converter=FormatDict)
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class OverrideFormatOp(Command, traits.Format):
-    """A command to override current cell's format `with_format`."""
+    """A command to override current cell's format :func:`with_format`."""
 
 
 ImposeFormat = ImposeFormatOp()
 OverrideFormat = OverrideFormatOp()
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class DrawBoxBorderOp(Command, traits.Range):
     """Draw a box with borders where `top_left_point` and `bottom_right_point` are respective corners using
     `(right|top|left|bottom)_formats`."""
@@ -244,10 +279,10 @@ class DrawBoxBorderOp(Command, traits.Range):
         return evolve(self, bottom_format=format_)
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class DefineNamedRangeOp(Command, traits.Range, traits.ExecutableCommand):
     """A command to make a box where `top_left_point` and `bottom_right_point` are respective corners of a range
-    `with_name`."""
+    :func:`with_name`."""
 
     name: str = "__DEFAULT"
 
@@ -268,17 +303,17 @@ DrawBoxBorder = DrawBoxBorderOp()
 DefineNamedRange = DefineNamedRangeOp()
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class SetRowHeightOp(Command, traits.FractionalSize, traits.ExecutableCommand):
-    """A command to set current row's height to `size`."""
+    """A command to set current row's height :func:`with_size`."""
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         target.ws.set_row(row=coords[0], height=self.size)
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class SetColumnWidthOp(Command, traits.FractionalSize, traits.ExecutableCommand):
-    """A command to set current column's height with `size`."""
+    """A command to set current column's height with :func:`with_size`."""
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         target.ws.set_column(coords[1], coords[1], self.size)
@@ -288,19 +323,19 @@ SetRowHeight = SetRowHeightOp()
 SetColWidth = SetColumnWidthOp()
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class SubmitHPagebreakOp(Command):
     """A command to submit a horizontal page break at current row.
     This is preserved between several cell_dsl_context."""
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class SubmitVPagebreakOp(Command):
     """A command to submit a vertical page break at current row.
     This is preserved between several cell_dsl_context."""
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class ApplyPagebreaksOp(Command):
     """A command to apply all existing pagebreaks.
     Should come after all `SubmitHPagebreakOp` and `SubmitVPagebreakOp` have been committed."""
@@ -320,9 +355,9 @@ PrevRowSkip = Move.r(-2)
 PrevColSkip = Move.c(-2)
 
 
-@attrs(auto_attribs=True, frozen=True)
+@attrs(auto_attribs=True, frozen=True, order=False)
 class AddCommentOp(Command, traits.Data, traits.ExecutableCommand):
-    """A command to add a comment to this cell `with_data`, configured `with_options`"""
+    """A command to add a comment to this cell :func:`with_data`, configured :func:`with_options`"""
     options: Dict[str, Any] = Factory(dict)
 
     def with_options(self, options):
@@ -335,48 +370,55 @@ class AddCommentOp(Command, traits.Data, traits.ExecutableCommand):
 AddComment = AddCommentOp()
 
 
-@attrs(auto_attribs=True, frozen=True)
-class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef):
-    """A command to add charts to the workbook, perhaps `with_subtype`,
-    then `do` some method calls on the added chart."""
+class _ChartHelper:
+    def __getattr__(self, item):
+        def recorder(*args, **kwargs):
+            return item, args, kwargs
+
+        return recorder
+
+
+_CHART_FUNC_EXCEPTIONS = {
+    'set_style',
+    'show_blanks_as',
+    'show_hidden_data',
+    'combine',
+}
+
+
+@attrs(auto_attribs=True, frozen=True, order=False)
+class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef, Generic[T]):
+    """
+    A command to add a chart to this cell perhaps :func:`with_subtype` and then :func:`do`
+    call some methods on the associated `target` class
+    """
     type: str = 'bar'
     subtype: Optional[str] = None
-    _sequence: List = Factory(list)
 
-    _EXCEPTIONS: ClassVar[Set[str]] = {
-        'set_style',
-        'show_blanks_as',
-        'show_hidden_data',
-        'combine',
-    }
-
-    def do(self, func: Union[Callable, str], *args, **kwargs):
-        """Add a deferred function call to the schedule.
-
-        Args:
-            func: Called function
-                A method with the name of `func` will be called on the
-                    chart object with `args` and `kwargs`
-                Or this exact string name if provided.
-            *args: Positional function call arguments
-            **kwargs: Keyword function call arguments
-        """
-        func_name = func
-
-        if callable(func):
-            func_name = func.__name__
-
-        self._sequence.append((func_name, args, kwargs))
-
-        return self
-
-    def nop_do(self, func: Union[Callable, str], *args, **kwargs):
-        """Same as `do`, but returns NoOp"""
-
-        self.do(func, *args, **kwargs)
+    # It's typed T to trick PyCharm or other similar systems
+    #   to autocomplete using methods of the associated
+    #   class. It is also appropriate since
+    #   ChartHelper works kinda like a mock of the associated
+    #   class.
+    target: T = Factory(_ChartHelper)
+    action_chain: List[Tuple[str, Tuple[Any, ...], Dict[str, Any]]] = Factory(list)
 
     def with_subtype(self, subtype):
         return evolve(self, subtype=subtype)
+
+    def do(self, command_list):
+        """
+        Add `command_list` to `action_chain`
+
+        Example:
+            >>> AddLineChart.do([
+            ...     # You really should only use `target` attribute of this class
+            ...     AddLineChart.target.add_series({'values': '=SheetName!$A$1:$D$1'}),
+            ...     # Charts allow to use `RefArray` in place of literal cell ranges
+            ...     AddLineChart.target.add_series({'values': RefArray.at('some ref')}),
+            ... ])
+        """
+        return evolve(self, action_chain=[*self.action_chain, *command_list])
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         result = target.wb.add_chart({
@@ -384,7 +426,7 @@ class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef):
             'subtype': self.subtype
         })
 
-        def ref_expander(options: Mapping[str, Any]):
+        def ref_expander(source: Mapping[str, Any]):
             def recursive(current_node: Mapping[str, Any]):
                 for key, value in current_node.items():
                     if isinstance(value, RefArrayOp):
@@ -396,14 +438,12 @@ class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef):
                     else:
                         yield key, value
 
-            return dict(recursive(options))
+            return dict(recursive(source))
 
-        for (f, a, k) in self._sequence:
+        for (f, a, k) in self.action_chain:
             target_func = getattr(result, f)
-            if target_func is None:
-                raise ValueError(f'Object of type {type(result)} does not have a method called {f}')
 
-            if f not in self._EXCEPTIONS:
+            if f not in _CHART_FUNC_EXCEPTIONS:
                 if k.get('options') is not None:
                     options = k['options']
                     k = {
@@ -423,12 +463,12 @@ class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef):
         target.ws.insert_chart(*coords, result)
 
 
-AddAreaChart = AddChartOp(type='area')
-AddBarChart = AddChartOp(type='bar')
-AddColumnChart = AddChartOp(type='column')
-AddLineChart = AddChartOp(type='line')
-AddPieChart = AddChartOp(type='pie')
-AddDoughnutChart = AddChartOp(type='doughnut')
-AddScatterChart = AddChartOp(type='scatter')
-AddStockChart = AddChartOp(type='stock')
-AddRadarChart = AddChartOp(type='radar')
+AddAreaChart: AddChartOp[ChartArea] = AddChartOp(type='area')
+AddBarChart: AddChartOp[ChartBar] = AddChartOp(type='bar')
+AddColumnChart: AddChartOp[ChartColumn] = AddChartOp(type='column')
+AddLineChart: AddChartOp[ChartLine] = AddChartOp(type='line')
+AddPieChart: AddChartOp[ChartPie] = AddChartOp(type='pie')
+AddDoughnutChart: AddChartOp[ChartDoughnut] = AddChartOp(type='doughnut')
+AddScatterChart: AddChartOp[ChartScatter] = AddChartOp(type='scatter')
+AddStockChart: AddChartOp[ChartStock] = AddChartOp(type='stock')
+AddRadarChart: AddChartOp[ChartRadar] = AddChartOp(type='radar')

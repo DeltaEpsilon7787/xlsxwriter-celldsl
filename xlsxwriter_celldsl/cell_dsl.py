@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from itertools import groupby
 from operator import itemgetter
 from pprint import pformat
-from typing import ContextManager, DefaultDict, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast
+from typing import DefaultDict, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast
 from warnings import warn
 
 from attr import Factory, attrib, attrs, evolve
@@ -28,6 +28,8 @@ CommitTypes = Union[
     FormatDict,
     None
 ]
+
+CoordActionPair = Tuple[Coords, ops.Command]
 
 
 def name_stack_repr(name_stack):
@@ -422,7 +424,7 @@ def _override_applier(coord_action_map):
     return result
 
 
-def _process_chain(action_chain, initial_row, initial_col):
+def _process_chain(action_chain, initial_row, initial_col) -> Tuple[List[CoordActionPair], Dict[str, Coords]]:
     coord_action_map, save_points = _process_movement(action_chain, initial_row, initial_col)
     coord_action_map, ref_array = _inject_coords(coord_action_map, save_points)
     coord_action_map = _introduce_ref_arrays(coord_action_map, ref_array)
@@ -444,10 +446,7 @@ class ExecutorHelper(object):
 
     def commit(self, chain: CommitTypes):
         """
-        Commit this chain to `action_chain`.
-
-        Args:
-            chain: A tree with commands, int, str, dict or None..
+        Commit this `chain` to `action_chain`.
 
         Notes:
             `int` acts like a shortcut for one or several `MoveOp` commands. Look at how
@@ -556,23 +555,28 @@ def cell_dsl_context(
         target: WorksheetTriplet,
         initial_row: int = 0,
         initial_col: int = 0,
-        stat_receiver: Optional[StatReceiver] = None
-) -> ContextManager[ExecutorHelper]:
+        stat_receiver: Optional[StatReceiver] = None,
+        overwrites_ok: bool = False
+):
     """Creates a context inside which you can perform writes and change cells in `target` in an arbitrary order,
-    starting at `initial_row` and `initial_col`.
+    starting at `initial_row` and `initial_col`, even writing multiple times to a cell if `overwrites_ok`.
 
     After it exits, it will execute those changes and send stats to `stat_receiver`.
 
     Parameters:
-        target: Target WriterPair to apply changes with
+        target: Target WorksheetTriplet to apply changes with
         stat_receiver:
             This is a reference to a StatReceiver object that will receive all data about visited cells and save points.
         initial_row: Starting row, zero-based
         initial_col: Starting column, zero-based
+        overwrites_ok:
+            If True, it is expected that there may be several writes with different data to the same cell, which is
+            ordinarily a sign of a bug since the result would be ambiguous.
+            If False, overwrites raise `ExecutionCellDSLError`.
 
-    Returns:
-        ExecutorHelper:
-            A special dummy class that commits changes via `commit` method.
+    Yields:
+        ContextManager[ExecutorHelper]:
+            Use this to :func:`commit <ExecutorHelper.commit>` commands.
     """
     helper = ExecutorHelper()
     yield helper
@@ -593,9 +597,12 @@ def cell_dsl_context(
     def trigger_execution_error(message):
         raise ExecutionCellDSLError(message, action_num, None, name_stack, action, save_points)
 
+    override_tracking = {}
+
     try:
         for action_num, (coords, action) in enumerate(coord_action_pairs):
             action_type = type(action)
+
             if action_type is ops.SubmitHPagebreakOp:
                 cell_dsl_context.hbreaks.add(coords[0])
             elif action_type is ops.SubmitVPagebreakOp:
@@ -606,10 +613,18 @@ def cell_dsl_context(
                 cell_dsl_context.hbreaks.clear()
                 cell_dsl_context.vbreaks.clear()
             elif action_type is ops.SectionBeginOp:
-                name_stack.append(action.name)
+                name_stack.append(cast(action, ops.SectionBeginOp).name)
             elif action_type is ops.SectionEndOp:
                 name_stack.pop()
-            elif isinstance(action, ExecutableCommand):
+
+            if not overwrites_ok and action.OVERWRITE_SENSITIVE:
+                if coords in override_tracking:
+                    if action != override_tracking[coords]:
+                        raise ExecutionCellDSLError(f'Overwrite has occurred at {coords}.')
+                    continue
+                override_tracking[coords] = action
+
+            if isinstance(action, ExecutableCommand):
                 action.execute(target, coords)
             else:
                 raise TypeError(f'Unknown action of type {type(action)}: {action}')
@@ -620,26 +635,9 @@ def cell_dsl_context(
         # We need to insert an implicit first action of moving over to
         #   starting position
         coord_action_pairs.insert(
-            0, ((initial_row, initial_col), None)
+            0, ((initial_row, initial_col), ops.Move)
         )
         stat_receiver.initial_row = initial_row
         stat_receiver.initial_col = initial_col
         stat_receiver.coord_pairs = coord_action_pairs
         stat_receiver.save_points = save_points
-
-
-@contextmanager
-def dummy_cell_dsl_context(
-        initial_row: int = 0,
-        initial_col: int = 0,
-        stat_receiver: StatReceiver = None
-):
-    """A version of `cell_dsl_context` that does not actually execute its actions, used in testing and debug instead."""
-    helper = ExecutorHelper()
-    yield helper
-
-    coord_action_pairs, save_points = _process_chain(helper.action_chain, initial_row, initial_col)
-    stat_receiver.initial_row = initial_row
-    stat_receiver.initial_col = initial_col
-    stat_receiver.coord_pairs = coord_action_pairs
-    stat_receiver.save_points = save_points

@@ -14,14 +14,17 @@ if TYPE_CHECKING:
 
 @attrs(auto_attribs=True)
 class WorkbookPair(object):
+    """A pair used to bundle a :class:`FormatHandler` and a :ref:`Workbook <workbook>`"""
     wb: Workbook
     fmt: FormatHandler
 
     def add_worksheet(self, name):
+        """Create a worksheet and bind it into a :class:`WorksheetTriplet`"""
         return WorksheetTriplet(self.wb, self.wb.add_worksheet(name), self.fmt)
 
     @classmethod
     def from_wb(cls, wb):
+        """Bind a :class:`Workbook` into a :class:`WorkbookPair`"""
         return cls(wb, FormatHandler(wb))
 
 
