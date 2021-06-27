@@ -19,6 +19,7 @@ Traits represent abstract properties that various operations may have
    Range
    NamedPoint
    ForwardRef
+   Options
    ExecutableCommand
 
 .. automodule:: xlsxwriter_celldsl.traits
@@ -58,6 +59,8 @@ Operations are the commands that are executed after they're committed
    ApplyPagebreaksOp
    AddCommentOp
    AddChartOp
+   AddConditionalFormatOp
+   AddImageOp
 
 .. automodule:: xlsxwriter_celldsl.ops
    :members:

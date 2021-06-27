@@ -177,3 +177,78 @@ however for this purpose using pure Python functions is more appropriate.
 
 Custom formats
 --------------
+.. py:currentmodule:: xlsxwriter_celldsl.formats
+
+Finally, it is time to talk about formats. Formats are essentially the main way to modify the outlook of
+both text and cells in Excel. However, one annoying thing about them is that in XlsxWriter formats can only be
+changed and applied during writing and some other specific writing operations. Worse still, formats
+are treated as objects that are added into the Excel sheet and require additional care
+in order to be useful.
+
+Further exacerbating the issue is the fact that formats cannot be merged together or modified.
+When working in Excel, one can easily apply changes like making text bold or changing the font without
+having to rewrite it. By contrast, XlsxWriter will require you to manually transfer information about
+the original format in the target cell, so, if you just want to make text bold in a specific cell,
+you have to also make sure to specify the font name, size and other features.
+
+Even though you are essentially just trying to compose two formats together, in reality you are
+merging them manually and it's your responsibility to make sure information is carried all the way through.
+
+Cell DSL removes the need to keep track of those details and utilizes its own special type
+in order to make formats easily composable.
+
+.. autoclass:: FormatDict
+   :noindex:
+
+Using this type, you can forget about keeping track of redundant format details and instead treat format objects
+as a composition of smaller format traits.
+
+All operations that utilize a format as one of the parameters will only accept FormatDict and plain dictionaries.
+During execution, handling converting format dictionaries into actual format objects will be done implicitly
+and in a way that creates the least amount of formats necessary, thus completely removing any need to deal with
+raw format objects directly.
+
+.. warning::
+  There is an explicit base format used in all operations.
+  All operations for which a custom format is not specified will use it.
+  All custom formats are implicitly merged with this base format barring :class:`xlsxwriter_celldsl.ops.DrawBoxBorderOp`.
+  This format can be configured using :func:`set_base_format` method of the specific operation.
+  Do keep in mind that this changes it globally and should only be done once as such.
+
+Operations that use formats inherit :class:`xlsxwriter_celldsl.traits.Format` trait.
+
+.. autoclass:: xlsxwriter_celldsl.traits.Format
+   :members:
+   :noindex:
+
+Additionally, Cell DSL provides a set of default formats, check :class:`FormatsNamespace` source code to see
+what the formats are like.
+
+.. autoclass:: FormatsNamespace
+   :noindex:
+
+When implementing your own formats, you should probably follow the same approach: define a class
+and class variables with formats that your code will use. Using FormatsNamespace directly is not
+advised as it is subject to change.
+
+For example::
+
+    @ensure_format_uniqueness
+    class MyFormats(FormatsNamespace):
+        # Empty base as a quick way to create FormatDicts
+        base = FormatDict()
+
+        # Fields that combine with base are generally some format traits
+        #   and by themselves don't define enough to constitute a format
+        my_font_name = base | {'font_name': 'Arial'}
+        my_font_size = base | {'font_size': 12}
+        my_alignment = base | {'align': 'right'}
+
+        # Fields that combine format traits are intended for use in code
+        my_default_font = my_font_name | my_font_size | my_alignment
+
+        # Do keep in mind that FormatsNamespace already has a number of traits predefined
+        #   that can be used to create new formats.
+
+Using :func:`ensure_format_uniqueness` will allow you to make sure all of the defined formats
+are distinct and do not repeat.
