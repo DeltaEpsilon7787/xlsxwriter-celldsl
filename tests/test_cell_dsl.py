@@ -1,3 +1,4 @@
+import base64
 from io import BytesIO
 from unittest.mock import ANY
 
@@ -8,7 +9,8 @@ from xlsxwriter import Workbook
 from xlsxwriter_celldsl import FormatsNamespace as F
 from xlsxwriter_celldsl.cell_dsl import CellDSLError, ExecutionCellDSLError, ExecutorHelper, MovementCellDSLError, \
     cell_dsl_context
-from xlsxwriter_celldsl.ops import AddBarChart, AddLineChart, AtCell, BacktrackCell, DefineNamedRange, DrawBoxBorder, \
+from xlsxwriter_celldsl.ops import AddBarChart, AddConditionalFormat, AddImage, AddLineChart, AtCell, BacktrackCell, \
+    DefineNamedRange, DrawBoxBorder, \
     ImposeFormat, \
     Load, MergeWrite, \
     Move, \
@@ -277,6 +279,93 @@ class TestCellDSL:
         spy_ws.assert_any_call(0, 2, ANY)
         spy_ws.assert_any_call(0, 3, ANY)
 
+    def test_conditional_format_1(self, ws_mock, mocker):
+        spy_ws = mocker.spy(ws_mock.ws, "conditional_format")
+
+        with cell_dsl_context(ws_mock, overwrites_ok=True) as E:
+            E.commit([
+                Write.with_data(-100), 6,
+                Write.with_data(100), 6,
+                AddConditionalFormat
+                    .top_left(2)
+                    .bottom_right(1)
+                    .with_options(
+                    {
+                        'type': 'cell',
+                        'criteria': '>=',
+                        'value': 0,
+                        'format': F.highlight_border
+                    })
+            ])
+
+        spy_ws.assert_any_call(0, 0, 0, 1, {
+            'type': 'cell',
+            'criteria': '>=',
+            'value': 0,
+            'format': ws_mock.fmt.verify_format(F.default_font | F.highlight_border)
+        })
+
+    def test_conditional_format_2(self, ws_mock, mocker):
+        spy_ws = mocker.spy(ws_mock.ws, "conditional_format")
+
+        with cell_dsl_context(ws_mock) as E:
+            E.commit([
+                Write.with_data(-100), 6,
+                Write.with_data(100), 6,
+                AddConditionalFormat
+                    .top_left(2)
+                    .bottom_right(1)
+                    .with_options(
+                    {
+                        'type': 'cell',
+                        'criteria': '>=',
+                        'value': 0,
+                    })
+                    .with_format(F.highlight_border)
+            ])
+
+        spy_ws.assert_any_call(0, 0, 0, 1, {
+            'type': 'cell',
+            'criteria': '>=',
+            'value': 0,
+            'format': ws_mock.fmt.verify_format(F.default_font | F.highlight_border)
+        })
+
+    def test_add_image_1(self, ws_mock, mocker):
+        spy_ws = mocker.spy(ws_mock.ws, "insert_image")
+
+        with cell_dsl_context(ws_mock) as E:
+            E.commit([
+                AddImage
+                    .with_filepath("./test.png")
+            ])
+
+        spy_ws.assert_any_call(0, 0, './test.png', {})
+
+    def test_add_image_2(self, ws_mock, mocker):
+        spy_ws = mocker.spy(ws_mock.ws, "insert_image")
+
+        # 1x1 PNG
+        test = BytesIO(bytearray([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00,
+            0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, 0x00,
+            0x00, 0x00, 0x01, 0x73, 0x52, 0x47, 0x42, 0x00, 0xae, 0xce, 0x1c, 0xe9, 0x00, 0x00, 0x00, 0x04, 0x67,
+            0x41, 0x4d, 0x41, 0x00, 0x00, 0xb1, 0x8f, 0x0b, 0xfc, 0x61, 0x05, 0x00, 0x00, 0x00, 0x09, 0x70, 0x00,
+            0x48, 0x59, 0x73, 0x00, 0x00, 0x0e, 0xc3, 0x00, 0x00, 0x0e, 0xc3, 0x01, 0xc7, 0x6f, 0xa8, 0x64, 0x00,
+            0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x18, 0x57, 0x63, 0xf8, 0xff, 0xff, 0x3f, 0x00, 0x05, 0xfe, 0x02,
+            0xa7, 0x35, 0x81, 0x84, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82, 0xfe,
+        ]))
+
+        with cell_dsl_context(ws_mock) as E:
+            E.commit([
+                AddImage
+                    .with_image_data(test)
+            ])
+
+        spy_ws.assert_any_call(0, 0, '', {
+            'image_data': test
+        })
+
 
 class TestCellDSLErrors:
     def test_format_nonformat_error(self):
@@ -400,4 +489,13 @@ class TestCellDSLErrors:
                     F.default_font_centered, "0, 1", 6,
                     "0, 2", 4,
                     F.default_font, "0, 1"
+                ])
+
+    def test_conditional_format_ambiguity(self, ws_mock):
+        with raises(ValueError, match=r'Both format key and format field are specified, use only one of them.'):
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([
+                    AddConditionalFormat.with_format(F.default_font).with_options({
+                        'format': F.highlight_border
+                    })
                 ])
