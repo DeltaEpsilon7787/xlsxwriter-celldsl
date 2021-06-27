@@ -3,7 +3,7 @@ from setuptools import setup
 with open("./README.md", encoding='utf-8') as in_:
     setup(
         name='xlsxwriter-celldsl',
-        version='0.3.1',
+        version='0.4.0',
         packages=['xlsxwriter_celldsl'],
         url='https://github.com/DeltaEpsilon7787/xlsxwriter-celldsl',
         license='MIT',
