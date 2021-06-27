@@ -168,6 +168,10 @@ with cell_dsl_context(ws_triplet) as E:
 ```
 
 # Changelog
+## 0.4.0
+* Add `AddConditionalFormatOp` and `AddImageOp`
+* Write the format section in the docs
+* New default format traits in `FormatsNamespace`
 
 ## 0.3.0
 
