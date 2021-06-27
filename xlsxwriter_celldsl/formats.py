@@ -78,14 +78,31 @@ class FormatsNamespace(object):
 
     left = base | {'align': 'left'}
     center = base | {'align': 'center', 'valign': 'vcenter'}
-    vbottom = base | {'valign': 'bottom'}
+    right = base | {'align': 'right'}
+    fill = base | {'align': 'fill'}
+    justify = base | {'align': 'justify'}
+    center_across = base | {'align': 'center_across'}
+    distributed = base | {'align': 'distributed'}
 
+    vbottom = base | {'valign': 'bottom'}
+    vtop = base | {'valign': 'top'}
+    vcenter = base | {'valign': 'vcenter'}
+    vjustify = base | {'valign': 'vjustify'}
+    vdistributed = base | {'valign': 'vdistributed'}
+
+    rotated_0 = base | {'rotation': 0}
     rotated_90 = base | {'rotation': 90}
+    rotated_180 = base | {'rotation': 270}
+    rotated_270 = base | {'rotation': -90}
 
     wrapped = base | {'text_wrap': True}
 
     bold = base | {'bold': True}
     italic = base | {'italic': True}
+    underline = base | {'underline': True}
+    strikeout = base | {'font_strikeout': True}
+    superscript = base | {'font_script': 1}
+    subscript = base | {'font_script': 2}
 
     default_font = default_font_name | default_font_size | left
     default_font_bold = default_font | bold
