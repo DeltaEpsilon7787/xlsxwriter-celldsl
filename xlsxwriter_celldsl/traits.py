@@ -83,10 +83,12 @@ class Range(Trait):
         * If it's a string, this will be the save point name at which the save occurs.
         * If it's an Integral
 
-            * If positive: this will be last n-th visited cell.
-            * If negative: this will be last n-th position in save stack which
-                will be retrieved without popping it from the stack.
-            * If zero, current cell will be the target.
+          * If positive: this will be last n-th visited cell.
+
+          * If negative: this will be last n-th position in save stack which will be retrieved without popping it
+            from the stack.
+
+          * If zero, current cell will be the target.
 
         * If it's Coords, it will be the absolute coords of the cell.
     """
@@ -177,6 +179,17 @@ class ForwardRef(Trait):
     def inject_refs(self: T, ref_array) -> T:
         """Not for public use; inject the `ref_array` into this object."""
         return evolve(self, resolved_refs=ref_array)
+
+
+@attrs(auto_attribs=True, frozen=True, order=False)
+class Options(Trait):
+    """Commands with this trait have a dictionary of `options`"""
+
+    options: Dict[str, Any] = attrib(factory=dict, repr=False, hash=False)
+
+    def with_options(self, options: Dict[str, Any]):
+        """Add new `options` to our configuration."""
+        return evolve(self, options={**self.options, **options})
 
 
 class ExecutableCommand(Trait):

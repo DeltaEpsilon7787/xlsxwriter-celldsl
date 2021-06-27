@@ -1,5 +1,7 @@
 import itertools
-from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, TypeVar
+from io import BytesIO
+from pathlib import Path
+from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, TypeVar, Union
 
 from attr import Factory, attrib, attrs, evolve
 from xlsxwriter.chart_area import ChartArea
@@ -356,12 +358,8 @@ PrevColSkip = Move.c(-2)
 
 
 @attrs(auto_attribs=True, frozen=True, order=False)
-class AddCommentOp(Command, traits.Data, traits.ExecutableCommand):
-    """A command to add a comment to this cell :func:`with_data`, configured :func:`with_options`"""
-    options: Dict[str, Any] = Factory(dict)
-
-    def with_options(self, options):
-        return evolve(self, options={**self.options, **options})
+class AddCommentOp(Command, traits.Data, traits.Options, traits.ExecutableCommand):
+    """A command to add a comment to this cell :func:`with_data`, configured :func:`with_options`."""
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         target.ws.write_comment(*coords, self.data, self.options)
@@ -390,7 +388,7 @@ _CHART_FUNC_EXCEPTIONS = {
 class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef, Generic[T]):
     """
     A command to add a chart to this cell perhaps :func:`with_subtype` and then :func:`do`
-    call some methods on the associated `target` class
+    call some methods on the associated `target` class.
     """
     type: str = 'bar'
     subtype: Optional[str] = None
@@ -472,3 +470,57 @@ AddDoughnutChart: AddChartOp[ChartDoughnut] = AddChartOp(type='doughnut')
 AddScatterChart: AddChartOp[ChartScatter] = AddChartOp(type='scatter')
 AddStockChart: AddChartOp[ChartStock] = AddChartOp(type='stock')
 AddRadarChart: AddChartOp[ChartRadar] = AddChartOp(type='radar')
+
+
+@attrs(auto_attribs=True, frozen=True, order=False)
+class AddConditionalFormatOp(Command, traits.ExecutableCommand, traits.Range, traits.Options, traits.Format):
+    """A command to add a conditional format to a range of cells with :func:`top_left` and :func:`bottom_right`
+    corners parametrized :func:`with_options`.
+
+    To configure the format, you can either use :func:`with_format` or specify the :class:`FormatDict` as
+    format key in options. Do not use both at the same time however."""
+
+    def execute(self, target: WorksheetTriplet, coords: traits.Coords):
+        if self.set_format and self.options.get('format'):
+            raise ValueError('Both format key and format field are specified, use only one of them.')
+
+        fmt = None
+        if self.set_format:
+            fmt = self.ensure_format(target.fmt)
+        if self.options.get('format'):
+            fmt = self.with_format(self.options['format']).ensure_format(target.fmt)
+
+        result = target.ws.conditional_format(
+            *self.top_left_point,
+            *self.bottom_right_point,
+            {
+                **self.options,
+                **(fmt and {'format': fmt} or {})
+            }
+        )
+
+        if result == -2:
+            raise ValueError(f"Invalid parameter or options: {self.options}")
+
+
+AddConditionalFormat = AddConditionalFormatOp()
+
+
+@attrs(auto_attribs=True, frozen=True, order=False)
+class AddImageOp(Command, traits.ExecutableCommand, traits.Options):
+    """A command to add an image to this cell either getting it :func:`with_filepath` or
+    constructing it :func:`with_image_data`, parametrized :func:`with_options`."""
+    file_path: str = ""
+
+    def with_filepath(self, file_path: Union[Path, str]):
+        return evolve(self, file_path=str(file_path))
+
+    def with_image_data(self, image_data: BytesIO):
+        return self.with_options({'image_data': image_data})
+
+    def execute(self, target: WorksheetTriplet, coords: traits.Coords):
+        target.ws.insert_image(*coords, self.file_path, self.options)
+
+
+AddImage = AddImageOp()
+
