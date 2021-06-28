@@ -1,6 +1,7 @@
 from collections import defaultdict, deque
 from contextlib import contextmanager
 from itertools import groupby
+from itertools import chain as itchain
 from operator import itemgetter
 from pprint import pformat
 from typing import DefaultDict, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast
@@ -499,7 +500,7 @@ class ExecutorHelper(object):
         prev_format = None
         write_op_chain = []
 
-        for subchain in chain + [None]:
+        for subchain in itchain(chain, [None]):
             subchain_type = type(subchain)
 
             if prev_format is not None and subchain_type not in (FormatAsDictForm, FormatDict, WriteDataShortForm):
