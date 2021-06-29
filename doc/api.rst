@@ -5,7 +5,7 @@ Traits
 ------
 Traits represent abstract properties that various operations may have
 
-.. currentmodule:: xlsxwriter_celldsl.traits
+.. currentmodule:: xlsxwriter_celldsl.ops.traits
 .. autosummary::
    :nosignatures:
 
@@ -22,7 +22,7 @@ Traits represent abstract properties that various operations may have
    Options
    ExecutableCommand
 
-.. automodule:: xlsxwriter_celldsl.traits
+.. automodule:: xlsxwriter_celldsl.ops.traits
    :members:
 
 .. _api-ops:
@@ -62,7 +62,7 @@ Operations are the commands that are executed after they're committed
    AddConditionalFormatOp
    AddImageOp
 
-.. automodule:: xlsxwriter_celldsl.ops
+.. automodule:: xlsxwriter_celldsl.ops.classes
    :members:
    :show-inheritance:
 

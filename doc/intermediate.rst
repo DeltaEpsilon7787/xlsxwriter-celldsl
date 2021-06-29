@@ -1,7 +1,7 @@
 Intermediate usage
 ==================
 
-.. py:currentmodule:: xlsxwriter_celldsl.ops
+.. py:currentmodule:: xlsxwriter_celldsl.ops.classes
 
 Advanced movement and Stack saves
 ---------------------------------
@@ -13,10 +13,10 @@ Cell DSL also comes with more unusual forms of save points and movement.
 .. autoclass:: BacktrackCellOp
    :noindex:
 
-.. autoclass:: StackSave
+.. autoclass:: StackSaveOp
    :noindex:
 
-.. autoclass:: StackLoad
+.. autoclass:: StackLoadOp
    :noindex:
 
 AtCellOp is used in those rare cases where there is a necessity to jump to a very specific location,
@@ -71,14 +71,14 @@ Besides basic :class:`WriteOp`, Cell DSL also comes with two additional ways to 
 WriteRichOp is specifically useful to write strings that have several formats into a single cell and
 also comes with a short form in :func:`commit <xlsxwriter_celldsl.cell_dsl.ExecutorHelper.commit>` method.
 
-MergeWriteOp is a strange variation of a    writing operation that has a :class:`Range <xlsxwriter_celldsl.traits.Range>`
+MergeWriteOp is a strange variation of a    writing operation that has a :class:`Range <xlsxwriter_celldsl.ops.traits.Range>`
 trait, mirroring the behavior of :func:`merge_range` method in XlsxWriter.
 
 Ranged commands
 ---------------
 There are several operations in Cell DSL which target a range of cells, all of which have quirks in what they do.
 
-.. autoclass:: xlsxwriter_celldsl.traits.Range
+.. autoclass:: xlsxwriter_celldsl.ops.traits.Range
    :noindex:
 
 The range trait itself has a fairly complicated set of rules regarding its value types.
@@ -95,7 +95,7 @@ Cell DSL provides a separate operation for charts and related commands specifica
 .. autoclass:: RefArrayOp
    :noindex:
 
-Operations with a trait of :class:`ForwardRef <xlsxwriter_celldsl.traits.ForwardRef>` receive
+Operations with a trait of :class:`ForwardRef <xlsxwriter_celldsl.ops.traits.ForwardRef>` receive
 a literal cell range into `resolved_refs` at the time of their execution.
 This is only relevant for custom commands that want to take advantage of this functionality.
 

@@ -101,7 +101,7 @@ Basic movement and basic write
 The two most basic operations, an operation to move an imaginary cursor within the spreadsheet
 and an operation to perform a write into the cell the cursor is at.
 
-.. py:currentmodule:: xlsxwriter_celldsl.ops
+.. py:currentmodule:: xlsxwriter_celldsl.ops.classes
 
 .. autoclass:: MoveOp
    :noindex:
@@ -117,7 +117,7 @@ for elaboration.
 Save / Load
 -----------
 
-.. py:currentmodule:: xlsxwriter_celldsl.ops
+.. py:currentmodule:: xlsxwriter_celldsl.ops.classes
 
 But movement with just :class:`MoveOp` would be quite limited and, because it utilizes relative movement,
 you do not know which position you're at unless you read the entire context beforehand.
@@ -210,13 +210,14 @@ raw format objects directly.
 .. warning::
   There is an explicit base format used in all operations.
   All operations for which a custom format is not specified will use it.
-  All custom formats are implicitly merged with this base format barring :class:`xlsxwriter_celldsl.ops.DrawBoxBorderOp`.
+  All custom formats are implicitly merged with this base format barring
+  :class:`xlsxwriter_celldsl.ops.classes.DrawBoxBorderOp`.
   This format can be configured using :func:`set_base_format` method of the specific operation.
   Do keep in mind that this changes it globally and should only be done once as such.
 
-Operations that use formats inherit :class:`xlsxwriter_celldsl.traits.Format` trait.
+Operations that use formats inherit :class:`xlsxwriter_celldsl.ops.traits.Format` trait.
 
-.. autoclass:: xlsxwriter_celldsl.traits.Format
+.. autoclass:: xlsxwriter_celldsl.ops.traits.Format
    :members:
    :noindex:
 
