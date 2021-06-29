@@ -137,4 +137,4 @@ in this case this string will be ``'=SheetName!$A$1:$D$1'``,
 because coordinates of ``A1`` are ``(0, 0)`` and of ``D1`` are ``(0, 3)``.
 
 .. note::
-    Substitution functionality is unique to charts, custom commands will have to reinvent the wheel
+    Substitution functionality is unique to charts, custom commands will have to reinvent the wheel.

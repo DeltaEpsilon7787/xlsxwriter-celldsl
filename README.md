@@ -168,7 +168,14 @@ with cell_dsl_context(ws_triplet) as E:
 ```
 
 # Changelog
+
+## 0.5.0
+
+* Charts can now be combined.
+* A suite of WriteOp variations for writing data with known type like `WriteNumber` and `WriteDatetime`.
+
 ## 0.4.0
+
 * Add `AddConditionalFormatOp` and `AddImageOp`
 * Write the format section in the docs
 * New default format traits in `FormatsNamespace`
