@@ -31,7 +31,7 @@ Operations
 ----------
 Operations are the commands that are executed after they're committed
 
-.. currentmodule:: xlsxwriter_celldsl.ops
+.. currentmodule:: xlsxwriter_celldsl.ops.classes
 .. autosummary::
    :nosignatures:
 

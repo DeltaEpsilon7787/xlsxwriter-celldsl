@@ -4,20 +4,11 @@ from pathlib import Path
 from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, TypeVar, Union
 
 from attr import Factory, attrib, attrs, evolve
-from xlsxwriter.chart_area import ChartArea
-from xlsxwriter.chart_bar import ChartBar
-from xlsxwriter.chart_column import ChartColumn
-from xlsxwriter.chart_doughnut import ChartDoughnut
-from xlsxwriter.chart_line import ChartLine
-from xlsxwriter.chart_pie import ChartPie
-from xlsxwriter.chart_radar import ChartRadar
-from xlsxwriter.chart_scatter import ChartScatter
-from xlsxwriter.chart_stock import ChartStock
 from xlsxwriter.utility import xl_range_formula
 
-from . import traits
-from .formats import FormatDict, FormatsNamespace
-from .utils import WorksheetTriplet
+from formats import FormatDict, FormatsNamespace
+from ops import traits
+from utils import WorksheetTriplet
 
 T = TypeVar('T')
 
@@ -77,15 +68,6 @@ class SectionEndOp(Command):
     """A command that indicates an end of the most recent `SectionBeginOp`."""
 
 
-StackSave = StackSaveOp()
-StackLoad = StackLoadOp()
-Load = LoadOp()
-Save = SaveOp()
-RefArray = RefArrayOp()
-SectionBegin = SectionBeginOp()
-SectionEnd = SectionEndOp()
-
-
 @attrs(auto_attribs=True, frozen=True, order=False)
 class MoveOp(Command, traits.RelativePosition):
     """A command to move :func:`r` rows and :func:`c` columns away from current cell."""
@@ -103,11 +85,6 @@ class BacktrackCellOp(Command):
 
     def rewind(self, n_cells: int):
         return evolve(self, n=n_cells)
-
-
-Move = MoveOp()
-AtCell = AtCellOp()
-BacktrackCell = BacktrackCellOp()
 
 
 @attrs(auto_attribs=True, frozen=True, order=False)
@@ -208,7 +185,7 @@ class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand)
                 prev_fragment=self
             )
         else:
-            raise TypeError
+            raise TypeError(fragment)
 
     def with_default_format(self, other):
         """Set format for fragments without a format. Should be applied to the first fragment"""
@@ -238,20 +215,6 @@ class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand)
         return self.set_format or self.default_format or self.FALLBACK_FORMAT
 
 
-Write = WriteOp()
-WriteNumber = Write.with_data_type('number')
-WriteString = Write.with_data_type('string')
-WriteBlank = Write.with_data_type('blank')
-WriteFormula = Write.with_data_type('formula')
-WriteDatetime = Write.with_data_type('datetime')
-WriteBoolean = Write.with_data_type('boolean')
-WriteURL = Write.with_data_type('url')
-WriteBlank = Write.with_data_type('blank')
-
-MergeWrite = MergeWriteOp()
-WriteRich = WriteRichOp()
-
-
 @attrs(auto_attribs=True, frozen=True, order=False)
 class ImposeFormatOp(Command, traits.Format):
     """A command to append to merge current cell's format :func:`with_format`."""
@@ -261,10 +224,6 @@ class ImposeFormatOp(Command, traits.Format):
 @attrs(auto_attribs=True, frozen=True, order=False)
 class OverrideFormatOp(Command, traits.Format):
     """A command to override current cell's format :func:`with_format`."""
-
-
-ImposeFormat = ImposeFormatOp()
-OverrideFormat = OverrideFormatOp()
 
 
 @attrs(auto_attribs=True, frozen=True, order=False)
@@ -310,10 +269,6 @@ class DefineNamedRangeOp(Command, traits.Range, traits.ExecutableCommand):
         target.wb.define_name(self.name, f'={name}')
 
 
-DrawBoxBorder = DrawBoxBorderOp()
-DefineNamedRange = DefineNamedRangeOp()
-
-
 @attrs(auto_attribs=True, frozen=True, order=False)
 class SetRowHeightOp(Command, traits.FractionalSize, traits.ExecutableCommand):
     """A command to set current row's height :func:`with_size`."""
@@ -328,10 +283,6 @@ class SetColumnWidthOp(Command, traits.FractionalSize, traits.ExecutableCommand)
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         target.ws.set_column(coords[1], coords[1], self.size)
-
-
-SetRowHeight = SetRowHeightOp()
-SetColWidth = SetColumnWidthOp()
 
 
 @attrs(auto_attribs=True, frozen=True, order=False)
@@ -352,29 +303,12 @@ class ApplyPagebreaksOp(Command):
     Should come after all `SubmitHPagebreakOp` and `SubmitVPagebreakOp` have been committed."""
 
 
-SubmitHPagebreak = SubmitHPagebreakOp()
-SubmitVPagebreak = SubmitVPagebreakOp()
-ApplyPagebreaks = ApplyPagebreaksOp()
-
-NextRow = Move.r(1)
-NextCol = Move.c(1)
-PrevRow = Move.r(-1)
-PrevCol = Move.c(-1)
-NextRowSkip = Move.r(2)
-NextColSkip = Move.c(2)
-PrevRowSkip = Move.r(-2)
-PrevColSkip = Move.c(-2)
-
-
 @attrs(auto_attribs=True, frozen=True, order=False)
 class AddCommentOp(Command, traits.Data, traits.Options, traits.ExecutableCommand):
     """A command to add a comment to this cell :func:`with_data`, configured :func:`with_options`."""
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         target.ws.write_comment(*coords, self.data, self.options)
-
-
-AddComment = AddCommentOp()
 
 
 class _ChartHelper:
@@ -418,7 +352,8 @@ class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef, Generic[T
         Add `command_list` to `action_chain`
 
         Example:
-            >>> AddLineChart.do([
+            >>> from xlsxwriter_celldsl.ops import AddLineChart, AddBarChart, RefArray
+            ... AddLineChart.do([
             ...     # You really should only use `target` attribute of this class
             ...     AddLineChart.target.add_series({'values': '=SheetName!$A$1:$D$1'}),
             ...     # Charts allow to use `RefArray` in place of literal cell ranges
@@ -484,17 +419,6 @@ class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef, Generic[T
             target.ws.insert_chart(*coords, result)
 
 
-AddAreaChart: AddChartOp[ChartArea] = AddChartOp(type='area')
-AddBarChart: AddChartOp[ChartBar] = AddChartOp(type='bar')
-AddColumnChart: AddChartOp[ChartColumn] = AddChartOp(type='column')
-AddLineChart: AddChartOp[ChartLine] = AddChartOp(type='line')
-AddPieChart: AddChartOp[ChartPie] = AddChartOp(type='pie')
-AddDoughnutChart: AddChartOp[ChartDoughnut] = AddChartOp(type='doughnut')
-AddScatterChart: AddChartOp[ChartScatter] = AddChartOp(type='scatter')
-AddStockChart: AddChartOp[ChartStock] = AddChartOp(type='stock')
-AddRadarChart: AddChartOp[ChartRadar] = AddChartOp(type='radar')
-
-
 @attrs(auto_attribs=True, frozen=True, order=False)
 class AddConditionalFormatOp(Command, traits.ExecutableCommand, traits.Range, traits.Options, traits.Format):
     """A command to add a conditional format to a range of cells with :func:`top_left` and :func:`bottom_right`
@@ -526,9 +450,6 @@ class AddConditionalFormatOp(Command, traits.ExecutableCommand, traits.Range, tr
             raise ValueError(f"Invalid parameter or options: {self.options}")
 
 
-AddConditionalFormat = AddConditionalFormatOp()
-
-
 @attrs(auto_attribs=True, frozen=True, order=False)
 class AddImageOp(Command, traits.ExecutableCommand, traits.Options):
     """A command to add an image to this cell either getting it :func:`with_filepath` or
@@ -543,7 +464,3 @@ class AddImageOp(Command, traits.ExecutableCommand, traits.Options):
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         target.ws.insert_image(*coords, self.file_path, self.options)
-
-
-AddImage = AddImageOp()
-

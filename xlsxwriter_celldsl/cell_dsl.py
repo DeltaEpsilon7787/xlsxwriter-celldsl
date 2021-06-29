@@ -9,11 +9,11 @@ from warnings import warn
 from attr import Factory, attrib, attrs, evolve
 from xlsxwriter.utility import xl_range_abs
 
-from xlsxwriter_celldsl import ops
-from xlsxwriter_celldsl.formats import FormatDict, FormatsNamespace as F
-from xlsxwriter_celldsl.ops import Move, Write, WriteRich
-from xlsxwriter_celldsl.traits import Coords, ExecutableCommand, ForwardRef, Range
-from xlsxwriter_celldsl.utils import WorksheetTriplet
+import ops
+from formats import FormatDict, FormatsNamespace as F
+from ops import Move, Write, WriteRich
+from ops.traits import Coords, ExecutableCommand, ForwardRef, Range
+from utils import WorksheetTriplet
 
 MovementShortForm = int
 WriteDataShortForm = str
@@ -21,7 +21,7 @@ FormatAsDictForm = dict
 
 CommitTypes = Union[
     Iterable['CommitTypes'],
-    ops.Command,
+    ops.classes.Command,
     MovementShortForm,
     WriteDataShortForm,
     FormatAsDictForm,
@@ -29,7 +29,7 @@ CommitTypes = Union[
     None
 ]
 
-CoordActionPair = Tuple[Coords, ops.Command]
+CoordActionPair = Tuple[Coords, ops.classes.Command]
 
 
 def name_stack_repr(name_stack):
@@ -98,7 +98,7 @@ class StatReceiver(object):
     """
     initial_row: int = attrib(init=False)
     initial_col: int = attrib(init=False)
-    coord_pairs: List[Tuple[Coords, ops.Command]] = attrib(init=False)
+    coord_pairs: List[Tuple[Coords, ops.classes.Command]] = attrib(init=False)
     save_points: Dict[str, Coords] = attrib(init=False, factory=dict)
 
     @property
@@ -146,7 +146,8 @@ class StatReceiver(object):
         return self.initial_row, self.initial_col
 
 
-def _process_movement(action_list, row, col) -> Tuple[DefaultDict[Coords, List[ops.Command]], Dict[str, Coords]]:
+def _process_movement(action_list, row, col) -> \
+        Tuple[DefaultDict[Coords, List[ops.classes.Command]], Dict[str, Coords]]:
     result = defaultdict(list)
     save_points = {}
     save_stack = deque()
@@ -166,31 +167,31 @@ def _process_movement(action_list, row, col) -> Tuple[DefaultDict[Coords, List[o
 
     for action_num, action in enumerate(action_list):
         action_type = type(action)
-        if action_type is ops.LoadOp:
+        if action_type is ops.classes.LoadOp:
             try:
                 row, col = save_points[action.point_name]
             except KeyError as e:
                 trigger_movement_error(f'Save point {action.point_name} does not exist.', e)
             visited.append((row, col))
-        elif action_type is ops.StackLoadOp:
+        elif action_type is ops.classes.StackLoadOp:
             try:
                 row, col = save_stack.pop()
             except IndexError as e:
                 trigger_movement_error(f'Save stack is empty.', e)
             visited.append((row, col))
-        elif action_type is ops.SaveOp:
+        elif action_type is ops.classes.SaveOp:
             save_points[action.point_name] = (row, col)
-        elif action_type is ops.StackSaveOp:
+        elif action_type is ops.classes.StackSaveOp:
             save_stack.append((row, col))
-        elif action_type is ops.MoveOp:
+        elif action_type is ops.classes.MoveOp:
             row += action.row
             col += action.col
             visited.append((row, col))
-        elif action_type is ops.AtCellOp:
+        elif action_type is ops.classes.AtCellOp:
             row = action.row
             col = action.col
             visited.append((row, col))
-        elif action_type is ops.BacktrackCellOp:
+        elif action_type is ops.classes.BacktrackCellOp:
             try:
                 for _ in range(action.n + 1):
                     row, col = visited.pop()
@@ -226,8 +227,8 @@ def _process_movement(action_list, row, col) -> Tuple[DefaultDict[Coords, List[o
                             action = action.bottom_right(visited[-action.bottom_right_point - 1])
                         except IndexError as e:
                             trigger_movement_error(
-                                f'Bottom right corner would use {action.bottom_right_point} last visited cell, but only '
-                                f'{len(visited)} cells have been visited',
+                                f'Bottom right corner would use {action.bottom_right_point} '
+                                f'last visited cell, but only {len(visited)} cells have been visited',
                                 e
                             )
                     elif action.bottom_right_point < 0:
@@ -242,9 +243,9 @@ def _process_movement(action_list, row, col) -> Tuple[DefaultDict[Coords, List[o
                             )
                     else:
                         action = action.bottom_right((row, col))
-            elif action_type is ops.SectionBeginOp:
+            elif action_type is ops.classes.SectionBeginOp:
                 name_stack.append(action.name)
-            elif action_type is ops.SectionEndOp:
+            elif action_type is ops.classes.SectionEndOp:
                 name_stack.pop()
 
             result[(row, col)].append(action)
@@ -259,7 +260,8 @@ def _process_movement(action_list, row, col) -> Tuple[DefaultDict[Coords, List[o
     return result, save_points
 
 
-def _inject_coords(coord_action_map, save_points) -> Tuple[DefaultDict[Coords, List[ops.Command]], Dict[str, str]]:
+def _inject_coords(coord_action_map, save_points) -> \
+        Tuple[DefaultDict[Coords, List[ops.classes.Command]], Dict[str, str]]:
     result = defaultdict(list)
     ref_array = {}
 
@@ -288,7 +290,7 @@ def _inject_coords(coord_action_map, save_points) -> Tuple[DefaultDict[Coords, L
                             e
                         )
 
-            if isinstance(action, ops.RefArrayOp):
+            if isinstance(action, ops.classes.RefArrayOp):
                 c = xl_range_abs(*action.top_left_point, *action.bottom_right_point)
                 ref_array[action.point_name] = f'{c}'
                 continue
@@ -299,7 +301,7 @@ def _inject_coords(coord_action_map, save_points) -> Tuple[DefaultDict[Coords, L
 
 
 def _introduce_ref_arrays(coord_action_map, ref_array):
-    result: DefaultDict[Coords, List[ops.Command]] = defaultdict(list)
+    result: DefaultDict[Coords, List[ops.classes.Command]] = defaultdict(list)
 
     for coords, actions in coord_action_map.items():
         for action in actions:
@@ -312,14 +314,14 @@ def _introduce_ref_arrays(coord_action_map, ref_array):
 
 
 def _expand_drawing(coord_action_map):
-    result: DefaultDict[Coords, List[ops.Command]] = defaultdict(list)
+    result: DefaultDict[Coords, List[ops.classes.Command]] = defaultdict(list)
 
-    impositions: DefaultDict[Coords, List[ops.Command]] = defaultdict(list)
+    impositions: DefaultDict[Coords, List[ops.classes.Command]] = defaultdict(list)
 
     r1, c1, r2, c2 = (None,) * 4
     for coords, actions in coord_action_map.items():
         for action in actions:
-            if isinstance(action, ops.DrawBoxBorderOp):
+            if isinstance(action, ops.classes.DrawBoxBorderOp):
                 r1, c1 = action.top_left_point
                 r2, c2 = action.bottom_right_point
 
@@ -353,7 +355,7 @@ def _expand_drawing(coord_action_map):
         merge_ops = [
             op
             for op in result[coords]
-            if isinstance(op, ops.MergeWriteOp)
+            if isinstance(op, ops.classes.MergeWriteOp)
         ]
         if merge_ops:
             # There is a bug that makes right border of merged cells to not be written
@@ -393,24 +395,24 @@ def _override_applier(coord_action_map):
 
         sorted_actions = sorted(
             actions,
-            key=lambda x: not isinstance(x, (ops.ImposeFormatOp, ops.OverrideFormatOp))
+            key=lambda x: not isinstance(x, (ops.classes.ImposeFormatOp, ops.classes.OverrideFormatOp))
         )
         imposition_focus = {}
         override_focus = None
         for action in sorted_actions:
-            if isinstance(action, ops.ImposeFormatOp):
+            if isinstance(action, ops.classes.ImposeFormatOp):
                 imposition_focus.update(action.format_)
-            elif isinstance(action, ops.OverrideFormatOp):
+            elif isinstance(action, ops.classes.OverrideFormatOp):
                 if override_focus is not None:
                     trigger_cell_dsl_error(f"There's already an OverrideFormat for cell {key}")
                 override_focus = action
             else:
-                if isinstance(action, (ops.WriteOp, ops.MergeWriteOp)):
+                if isinstance(action, (ops.classes.WriteOp, ops.classes.MergeWriteOp)):
                     if override_focus:
                         action = evolve(action, set_format=override_focus.format_)
                     elif imposition_focus:
                         action = action.with_format(imposition_focus)
-                elif isinstance(action, ops.WriteRichOp):
+                elif isinstance(action, ops.classes.WriteRichOp):
                     if override_focus or imposition_focus:
                         # TODO: Figure out how to deal with impositions on those (should they be applied
                         #   to every text run?)
@@ -442,7 +444,7 @@ def _process_chain(action_chain, initial_row, initial_col) -> Tuple[List[CoordAc
 class ExecutorHelper(object):
     """A special object that performs some preprocessing of the commands when `commit` is called
     and stores the actions to be executed in `action_chain`"""
-    action_chain: List[ops.Command] = Factory(list)
+    action_chain: List[ops.classes.Command] = Factory(list)
 
     def commit(self, chain: CommitTypes):
         """
@@ -540,7 +542,7 @@ class ExecutorHelper(object):
                     delta_row += direction in '123' and 1 or direction in '789' and -1 or 0
                     delta_col += direction in '369' and 1 or direction in '147' and -1 or 0
                 self.action_chain.append(ops.Move.r(delta_row).c(delta_col))
-            elif isinstance(subchain, ops.Command):
+            elif isinstance(subchain, ops.classes.Command):
                 self.action_chain.append(subchain)
             elif isinstance(subchain, Iterable):
                 self.commit(subchain)
@@ -603,18 +605,18 @@ def cell_dsl_context(
         for action_num, (coords, action) in enumerate(coord_action_pairs):
             action_type = type(action)
 
-            if action_type is ops.SubmitHPagebreakOp:
+            if action_type is ops.classes.SubmitHPagebreakOp:
                 cell_dsl_context.hbreaks.add(coords[0])
-            elif action_type is ops.SubmitVPagebreakOp:
+            elif action_type is ops.classes.SubmitVPagebreakOp:
                 cell_dsl_context.vbreaks.add(coords[1])
-            elif action_type is ops.ApplyPagebreaksOp:
+            elif action_type is ops.classes.ApplyPagebreaksOp:
                 target.ws.set_h_pagebreaks([*cell_dsl_context.hbreaks])
                 target.ws.set_v_pagebreaks([*cell_dsl_context.vbreaks])
                 cell_dsl_context.hbreaks.clear()
                 cell_dsl_context.vbreaks.clear()
-            elif action_type is ops.SectionBeginOp:
-                name_stack.append(cast(ops.SectionBeginOp, action).name)
-            elif action_type is ops.SectionEndOp:
+            elif action_type is ops.classes.SectionBeginOp:
+                name_stack.append(cast(ops.classes.SectionBeginOp, action).name)
+            elif action_type is ops.classes.SectionEndOp:
                 name_stack.pop()
             else:
                 if not overwrites_ok and action.OVERWRITE_SENSITIVE:

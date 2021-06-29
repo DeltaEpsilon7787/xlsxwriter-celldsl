@@ -5,19 +5,11 @@ from _pytest.recwarn import warns
 from pytest import fixture, raises
 from xlsxwriter import Workbook
 
-from xlsxwriter_celldsl import FormatsNamespace as F
-from xlsxwriter_celldsl.cell_dsl import CellDSLError, ExecutionCellDSLError, ExecutorHelper, MovementCellDSLError, \
+from cell_dsl import CellDSLError, ExecutionCellDSLError, ExecutorHelper, MovementCellDSLError, \
     cell_dsl_context
-from xlsxwriter_celldsl.ops import AddBarChart, AddConditionalFormat, AddImage, AddLineChart, AtCell, BacktrackCell, \
-    DefineNamedRange, DrawBoxBorder, \
-    ImposeFormat, \
-    Load, MergeWrite, \
-    Move, \
-    OverrideFormat, RefArray, Save, \
-    SectionBegin, SectionEnd, StackLoad, \
-    StackSave, Write, \
-    WriteRich
-from xlsxwriter_celldsl.utils import WorkbookPair, chain_rich
+from formats import FormatsNamespace as F
+from ops import *
+from utils import WorkbookPair, chain_rich
 
 
 class TestExecutorHelper:

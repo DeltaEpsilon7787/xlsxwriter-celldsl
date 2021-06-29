@@ -6,10 +6,11 @@ from attr import attrs
 from xlsxwriter import Workbook
 from xlsxwriter.worksheet import Worksheet
 
-from .formats import FormatHandler
+from formats import FormatHandler
 
 if TYPE_CHECKING:
     from cell_dsl import CommitTypes
+    from ops.classes import WriteRichOp
 
 
 @attrs(auto_attribs=True)
@@ -111,7 +112,7 @@ def col_chain(
 
 def chain_rich(iterable: Iterable['WriteRichOp']) -> 'WriteRichOp':
     """Take an `iterable` of `WriteRich` segments and combine them to produce a single WriteRich operation."""
-    from .ops import WriteRichOp
+    from ops.classes import WriteRichOp
 
     return reduce(WriteRichOp.then, iterable)
 

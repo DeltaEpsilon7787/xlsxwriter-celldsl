@@ -3,7 +3,12 @@ various key coordinates, overall allowing one to write Excel table generating co
 manually and translating the actions into commands in `ops` module, after `commit`ing them inside `cell_dsl_context`,
 after which stats can be transmitted to a `StatReceiver` and used for further writing, all the while constructing
 text formats by conjunction `FormatDict`s and using some default formats from `FormatsNamespace`."""
-from . import formats, ops, traits, utils
-from .cell_dsl import StatReceiver, cell_dsl_context
-from .formats import FormatDict, FormatsNamespace
-from .utils import WorkbookPair
+
+import cell_dsl
+import formats
+import ops
+import utils
+from cell_dsl import StatReceiver, cell_dsl_context
+from utils import WorkbookPair
+
+__all__ = ['cell_dsl', 'ops', 'formats', 'utils', 'cell_dsl_context', 'StatReceiver', 'WorkbookPair']

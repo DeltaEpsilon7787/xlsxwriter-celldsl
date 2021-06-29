@@ -4,8 +4,8 @@ from typing import Any, ClassVar, Dict, Optional, TYPE_CHECKING, Tuple, TypeVar,
 
 from attr import attrib, attrs, evolve
 
-from .formats import FormatDict, FormatHandler, FormatsNamespace
-from .utils import WorksheetTriplet
+from formats import FormatDict, FormatHandler, FormatsNamespace
+from utils import WorksheetTriplet
 
 if TYPE_CHECKING:
     pass

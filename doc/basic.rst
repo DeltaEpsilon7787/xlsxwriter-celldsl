@@ -68,10 +68,9 @@ Operations are accepted by :class:`ExecutorHelper` via its :func:`commit <Execut
 Besides keeping track of submitted operations, this method also performs some preprocessing,
 providing several short forms of common operations, namely for writing and movement.
 
-:ref:`ops module <api-ops>` exports two types of names: operation classes and base operation instances.
+:ref:`ops module <api-ops>` exports types of names: operation classes and base operation instances.
 
-Each instance has a verb-like name and its respective class is the same name ending with *Op*.
-So, `ops.Write` is an instance of `ops.WriteOp`.
+Each instance has a verb-like name and all classes are located in `classes` submodule.
 
 As `commit` accepts instances, not classes, this means you don't need to instantiate your own base instances.
 
