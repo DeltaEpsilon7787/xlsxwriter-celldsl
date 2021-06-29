@@ -423,11 +423,16 @@ class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef, Generic[T
             ...     AddLineChart.target.add_series({'values': '=SheetName!$A$1:$D$1'}),
             ...     # Charts allow to use `RefArray` in place of literal cell ranges
             ...     AddLineChart.target.add_series({'values': RefArray.at('some ref')}),
+            ...     # Combine method accepts AddChartOp
+            ...     AddLineChart.target.combine(
+            ...         # This will combine this line chart with a bar chart
+            ...         AddBarChart.do([])
+            ...     )
             ... ])
         """
         return evolve(self, action_chain=[*self.action_chain, *command_list])
 
-    def execute(self, target: WorksheetTriplet, coords: traits.Coords):
+    def execute(self, target: WorksheetTriplet, coords: traits.Coords, _is_secondary=False):
         result = target.wb.add_chart({
             'type': self.type,
             'subtype': self.subtype
@@ -464,10 +469,19 @@ class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef, Generic[T
                 new_options = ref_expander(options)
 
                 target_func(new_options, *a[1:], **k)
+            elif f == 'combine':
+                # Special case, need to create another chart
+                secondary, = a
+                secondary = secondary.execute(target, coords, _is_secondary=True)
+
+                result.combine(secondary)
             else:
                 target_func(*a, **k)
 
-        target.ws.insert_chart(*coords, result)
+        if _is_secondary:
+            return result
+        else:
+            target.ws.insert_chart(*coords, result)
 
 
 AddAreaChart: AddChartOp[ChartArea] = AddChartOp(type='area')
