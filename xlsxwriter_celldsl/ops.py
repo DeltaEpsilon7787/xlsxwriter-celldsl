@@ -239,6 +239,15 @@ class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand)
 
 
 Write = WriteOp()
+WriteNumber = Write.with_data_type('number')
+WriteString = Write.with_data_type('string')
+WriteBlank = Write.with_data_type('blank')
+WriteFormula = Write.with_data_type('formula')
+WriteDatetime = Write.with_data_type('datetime')
+WriteBoolean = Write.with_data_type('boolean')
+WriteURL = Write.with_data_type('url')
+WriteBlank = Write.with_data_type('blank')
+
 MergeWrite = MergeWriteOp()
 WriteRich = WriteRichOp()
 
