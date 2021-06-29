@@ -1,7 +1,6 @@
 from collections import defaultdict, deque
 from contextlib import contextmanager
-from itertools import groupby
-from itertools import chain as itchain
+from itertools import chain as itchain, groupby
 from operator import itemgetter
 from pprint import pformat
 from typing import DefaultDict, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast
@@ -112,11 +111,11 @@ class StatReceiver(object):
 
     @property
     def max_row(self) -> int:
-        return cast(int, max(self._coord_iter, key=itemgetter(0)))
+        return cast(int, max(self._coord_iter, key=itemgetter(0))[0])
 
     @property
     def max_col(self) -> int:
-        return cast(int, max(self._coord_iter, key=itemgetter(1)))
+        return cast(int, max(self._coord_iter, key=itemgetter(1))[1])
 
     @property
     def max_row_at_max_col(self):
@@ -548,7 +547,7 @@ class ExecutorHelper(object):
             elif subchain is None:
                 pass
             else:
-                raise CellDSLError(f'Cannot process this type: {subchain_type}')
+                raise CellDSLError(f'Cannot process this type: {subchain_type}, {subchain}')
 
 
 @contextmanager
@@ -614,21 +613,20 @@ def cell_dsl_context(
                 cell_dsl_context.hbreaks.clear()
                 cell_dsl_context.vbreaks.clear()
             elif action_type is ops.SectionBeginOp:
-                name_stack.append(cast(action, ops.SectionBeginOp).name)
+                name_stack.append(cast(ops.SectionBeginOp, action).name)
             elif action_type is ops.SectionEndOp:
                 name_stack.pop()
-
-            if not overwrites_ok and action.OVERWRITE_SENSITIVE:
-                if coords in override_tracking:
-                    if action != override_tracking[coords]:
-                        raise ExecutionCellDSLError(f'Overwrite has occurred at {coords}.')
-                    continue
-                override_tracking[coords] = action
-
-            if isinstance(action, ExecutableCommand):
-                action.execute(target, coords)
             else:
-                raise TypeError(f'Unknown action of type {type(action)}: {action}')
+                if not overwrites_ok and action.OVERWRITE_SENSITIVE:
+                    if coords in override_tracking:
+                        if action != override_tracking[coords]:
+                            raise ExecutionCellDSLError(f'Overwrite has occurred at {coords}.')
+                        continue
+                    override_tracking[coords] = action
+                if isinstance(action, ExecutableCommand):
+                    action.execute(target, coords)
+                else:
+                    raise TypeError(f'Unknown action of type {type(action)}: {action}')
     except CellDSLError as e:
         trigger_execution_error(e.message)
 
