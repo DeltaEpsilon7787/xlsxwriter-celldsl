@@ -1,4 +1,3 @@
-import base64
 from io import BytesIO
 from unittest.mock import ANY
 
@@ -365,6 +364,27 @@ class TestCellDSL:
         spy_ws.assert_any_call(0, 0, '', {
             'image_data': test
         })
+
+    def test_add_chart_combined(self, ws_mock, mocker):
+        spy_wb = mocker.spy(ws_mock.wb, "add_chart")
+        spy_ws = mocker.spy(ws_mock.ws, "insert_chart")
+
+        with cell_dsl_context(ws_mock, overwrites_ok=True) as E:
+            E.commit([
+                AddBarChart.do([
+                    AddBarChart.target.add_series({'values': '=TestSheet!$A$1:$C$1'}),
+                    AddBarChart.target.combine(
+                        AddLineChart.do([
+                            AddLineChart.target.add_series({'values': '=TestSheet!$A$2:$C$2'})
+                        ])
+                    ),
+                ]),
+            ])
+
+        spy_wb.assert_any_call({'type': 'bar', 'subtype': None})
+        spy_wb.assert_any_call({'type': 'line', 'subtype': None})
+
+        spy_ws.assert_called_once_with(0, 0, ANY)
 
 
 class TestCellDSLErrors:
