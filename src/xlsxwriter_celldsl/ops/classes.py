@@ -407,6 +407,7 @@ class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef, Generic[T
             elif f == 'combine':
                 # Special case, need to create another chart
                 secondary, = a
+                secondary = secondary.inject_refs(self.resolved_refs)
                 secondary = secondary.execute(target, coords, _is_secondary=True)
 
                 result.combine(secondary)
