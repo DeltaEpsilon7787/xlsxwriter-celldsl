@@ -1,10 +1,13 @@
-from setuptools import setup
+from setuptools import find_packages, setup
 
 with open("./README.md", encoding='utf-8') as in_:
     setup(
         name='xlsxwriter-celldsl',
-        version='0.5.0',
-        packages=['xlsxwriter_celldsl'],
+        version='0.5.1',
+        packages=find_packages(where='src'),
+        package_dir={
+            "": "src"
+        },
         url='https://github.com/DeltaEpsilon7787/xlsxwriter-celldsl',
         license='MIT',
         author='DeltaEpsilon7787',

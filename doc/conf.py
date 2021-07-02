@@ -16,8 +16,7 @@ import sys
 import sphinx_bootstrap_theme
 
 sys.path.insert(0, os.path.abspath('.'))
-sys.path.insert(0, os.path.abspath('..'))
-sys.path.insert(0, os.path.abspath('../xlsxwriter_celldsl'))
+sys.path.insert(0, os.path.abspath('../src/xlsxwriter_celldsl'))
 
 # -- Project information -----------------------------------------------------
 

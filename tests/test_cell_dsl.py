@@ -5,11 +5,11 @@ from _pytest.recwarn import warns
 from pytest import fixture, raises
 from xlsxwriter import Workbook
 
-from cell_dsl import CellDSLError, ExecutionCellDSLError, ExecutorHelper, MovementCellDSLError, \
+from xlsxwriter_celldsl.cell_dsl import CellDSLError, ExecutionCellDSLError, ExecutorHelper, MovementCellDSLError, \
     cell_dsl_context
-from formats import FormatsNamespace as F
-from ops import *
-from utils import WorkbookPair, chain_rich
+from xlsxwriter_celldsl.formats import FormatsNamespace as F
+from xlsxwriter_celldsl.ops import *
+from xlsxwriter_celldsl.utils import WorkbookPair, chain_rich
 
 
 class TestExecutorHelper:

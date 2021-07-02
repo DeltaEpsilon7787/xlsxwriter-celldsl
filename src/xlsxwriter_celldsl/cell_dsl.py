@@ -9,11 +9,9 @@ from warnings import warn
 from attr import Factory, attrib, attrs, evolve
 from xlsxwriter.utility import xl_range_abs
 
-import ops
-from formats import FormatDict, FormatsNamespace as F
-from ops import Move, Write, WriteRich
-from ops.traits import Coords, ExecutableCommand, ForwardRef, Range
-from utils import WorksheetTriplet
+from . import ops
+from .formats import FormatDict, FormatsNamespace as F
+from .utils import WorksheetTriplet
 
 MovementShortForm = int
 WriteDataShortForm = str
@@ -29,7 +27,7 @@ CommitTypes = Union[
     None
 ]
 
-CoordActionPair = Tuple[Coords, ops.classes.Command]
+CoordActionPair = Tuple[ops.traits.Coords, ops.classes.Command]
 
 
 def name_stack_repr(name_stack):
@@ -98,16 +96,16 @@ class StatReceiver(object):
     """
     initial_row: int = attrib(init=False)
     initial_col: int = attrib(init=False)
-    coord_pairs: List[Tuple[Coords, ops.classes.Command]] = attrib(init=False)
-    save_points: Dict[str, Coords] = attrib(init=False, factory=dict)
+    coord_pairs: List[Tuple[ops.traits.Coords, ops.classes.Command]] = attrib(init=False)
+    save_points: Dict[str, ops.traits.Coords] = attrib(init=False, factory=dict)
 
     @property
     def is_null(self):
         return len(self.coord_pairs) < 2
 
     @property
-    def _coord_iter(self) -> Iterator[Coords]:
-        return cast(Iterator[Coords], map(itemgetter(0), self.coord_pairs))
+    def _coord_iter(self) -> Iterator[ops.traits.Coords]:
+        return cast(Iterator[ops.traits.Coords], map(itemgetter(0), self.coord_pairs))
 
     @property
     def max_row(self) -> int:
@@ -138,16 +136,16 @@ class StatReceiver(object):
         )
 
     @property
-    def max_coords(self) -> Coords:
+    def max_coords(self) -> ops.traits.Coords:
         return self.max_row, self.max_col
 
     @property
-    def initial_coords(self) -> Coords:
+    def initial_coords(self) -> ops.traits.Coords:
         return self.initial_row, self.initial_col
 
 
 def _process_movement(action_list, row, col) -> \
-        Tuple[DefaultDict[Coords, List[ops.classes.Command]], Dict[str, Coords]]:
+        Tuple[DefaultDict[ops.traits.Coords, List[ops.classes.Command]], Dict[str, ops.traits.Coords]]:
     result = defaultdict(list)
     save_points = {}
     save_stack = deque()
@@ -198,7 +196,7 @@ def _process_movement(action_list, row, col) -> \
             except IndexError as e:
                 trigger_movement_error(f'Could not backtrack {action.n} cells.', e)
         else:
-            if isinstance(action, Range):
+            if isinstance(action, ops.traits.Range):
                 if isinstance(action.top_left_point, int):
                     if action.top_left_point > 0:
                         try:
@@ -261,7 +259,7 @@ def _process_movement(action_list, row, col) -> \
 
 
 def _inject_coords(coord_action_map, save_points) -> \
-        Tuple[DefaultDict[Coords, List[ops.classes.Command]], Dict[str, str]]:
+        Tuple[DefaultDict[ops.traits.Coords, List[ops.classes.Command]], Dict[str, str]]:
     result = defaultdict(list)
     ref_array = {}
 
@@ -270,7 +268,7 @@ def _inject_coords(coord_action_map, save_points) -> \
 
     for coords, actions in coord_action_map.items():
         for action in actions:
-            if isinstance(action, Range):
+            if isinstance(action, ops.traits.Range):
                 if isinstance(action.top_left_point, str):
                     try:
                         action = action.top_left(save_points[action.top_left_point])
@@ -301,11 +299,11 @@ def _inject_coords(coord_action_map, save_points) -> \
 
 
 def _introduce_ref_arrays(coord_action_map, ref_array):
-    result: DefaultDict[Coords, List[ops.classes.Command]] = defaultdict(list)
+    result: DefaultDict[ops.traits.Coords, List[ops.classes.Command]] = defaultdict(list)
 
     for coords, actions in coord_action_map.items():
         for action in actions:
-            if isinstance(action, ForwardRef):
+            if isinstance(action, ops.traits.ForwardRef):
                 action = action.inject_refs(ref_array)
 
             result[coords].append(action)
@@ -314,9 +312,9 @@ def _introduce_ref_arrays(coord_action_map, ref_array):
 
 
 def _expand_drawing(coord_action_map):
-    result: DefaultDict[Coords, List[ops.classes.Command]] = defaultdict(list)
+    result: DefaultDict[ops.traits.Coords, List[ops.classes.Command]] = defaultdict(list)
 
-    impositions: DefaultDict[Coords, List[ops.classes.Command]] = defaultdict(list)
+    impositions: DefaultDict[ops.traits.Coords, List[ops.classes.Command]] = defaultdict(list)
 
     r1, c1, r2, c2 = (None,) * 4
     for coords, actions in coord_action_map.items():
@@ -426,7 +424,8 @@ def _override_applier(coord_action_map):
     return result
 
 
-def _process_chain(action_chain, initial_row, initial_col) -> Tuple[List[CoordActionPair], Dict[str, Coords]]:
+def _process_chain(action_chain, initial_row, initial_col) -> Tuple[
+    List[CoordActionPair], Dict[str, ops.traits.Coords]]:
     coord_action_map, save_points = _process_movement(action_chain, initial_row, initial_col)
     coord_action_map, ref_array = _inject_coords(coord_action_map, save_points)
     coord_action_map = _introduce_ref_arrays(coord_action_map, ref_array)
@@ -526,9 +525,9 @@ class ExecutorHelper(object):
 
             if len(write_op_chain) > 1:
                 # WriteRich form
-                to_add = WriteRich.with_data(write_op_chain[0].data).with_format(write_op_chain[0].format_)
+                to_add = ops.WriteRich.with_data(write_op_chain[0].data).with_format(write_op_chain[0].format_)
                 for segment in write_op_chain[1:]:
-                    to_add = to_add.then(WriteRich.with_data(segment.data).with_format(segment.format_))
+                    to_add = to_add.then(ops.WriteRich.with_data(segment.data).with_format(segment.format_))
                 self.action_chain.append(to_add)
                 write_op_chain.clear()
             elif len(write_op_chain) == 1:
@@ -625,7 +624,7 @@ def cell_dsl_context(
                             raise ExecutionCellDSLError(f'Overwrite has occurred at {coords}.')
                         continue
                     override_tracking[coords] = action
-                if isinstance(action, ExecutableCommand):
+                if isinstance(action, ops.traits.ExecutableCommand):
                     action.execute(target, coords)
                 else:
                     raise TypeError(f'Unknown action of type {type(action)}: {action}')
