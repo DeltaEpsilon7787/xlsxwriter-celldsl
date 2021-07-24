@@ -1,22 +1,30 @@
 import itertools
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, TypeVar, Union
+from typing import Any, ClassVar, Deque, Dict, Generic, List, Mapping, Optional, Tuple, TypeVar, Union
 
 from attr import Factory, attrib, attrs, evolve
 from xlsxwriter.utility import xl_range_formula
 
 from . import traits
+from ..errors import ExecutionCellDSLError
 from ..formats import FormatDict, FormatsNamespace
 from ..utils import WorksheetTriplet
 
 T = TypeVar('T')
 
 
+@attrs(auto_attribs=True, frozen=True, order=False)
 class Command(object):
     """Base class for all commands."""
-    OVERWRITE_SENSITIVE = False
-    pass
+    OVERWRITE_SENSITIVE: ClassVar[bool] = False
+    NAME_STACK_DATA: List[str] = attrib(factory=list, repr=False)
+
+    def absorb_name_stack_data(self, data: Deque):
+        """Not for public use; copies `data` to `NAME_STACK_DATA`"""
+        if data:
+            return evolve(self, NAME_STACK_DATA=[*data])
+        return self
 
 
 @attrs(auto_attribs=True, frozen=True, order=False)
@@ -100,13 +108,15 @@ class WriteOp(Command, traits.Data, traits.DataType, traits.Format, traits.Execu
             return_code = target.ws.write(*args)
 
         if return_code == -2:
-            raise ValueError('Write failed because the string is longer than 32k characters')
+            raise ExecutionCellDSLError('Write failed because the string is longer than 32k characters')
 
         if return_code == -3:
-            raise ValueError('Write failed because the URL is longer than 2079 characters long')
+            raise ExecutionCellDSLError('Write failed because the URL is longer than 2079 characters '
+                                        'long')
 
         if return_code == -4:
-            raise ValueError('Write failed because there are more than 65530 URLs in the sheet')
+            raise ExecutionCellDSLError('Write failed because there are more than 65530 URLs in the '
+                                        'sheet')
 
 
 @attrs(auto_attribs=True, frozen=True, order=False)
@@ -137,21 +147,27 @@ class MergeWriteOp(Command, traits.CardinalSize, traits.Data, traits.DataType, t
             )
 
         if return_code == -2:
-            raise ValueError('Merge write failed because the string is longer than 32k characters')
+            raise ExecutionCellDSLError('Merge write failed because the string is longer than 32k '
+                                        'characters')
 
         if return_code == -3:
-            raise ValueError('Merge write failed because the URL is longer than 2079 characters long')
+            raise ExecutionCellDSLError('Merge write failed because the URL is longer than 2079 '
+                                        'characters long')
 
         if return_code == -4:
-            raise ValueError('Merge write failed because there are more than 65530 URLs in the sheet')
+            raise ExecutionCellDSLError(
+                'Merge write failed because there are more than 65530 URLs in the sheet')
 
 
 @attrs(auto_attribs=True, frozen=True, order=False)
 class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand):
     """A command to write a text run :func:`with_data` and
     :func:`with_format` to current position, :func:`then` perhaps write some more,
-    optionally :func:`with_default_format`."""
+    optionally :func:`with_default_format`.
+
+    Additionally, the first `WriteRichOp` may also set this cell :func:`with_cell_format`."""
     default_format: FormatDict = attrib(factory=FormatDict, converter=FormatDict)
+    cell_format: Optional[FormatDict] = None
     prev_fragment: Optional['WriteRichOp'] = None
     OVERWRITE_SENSITIVE = True
 
@@ -165,15 +181,19 @@ class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand)
             for fragment in fragments
         )))]
 
+        if self.cell_format is not None:
+            formats_and_data.append(target.fmt.verify_format(self.cell_format))
+
         return_code = target.ws.write_rich_string(*coords, *formats_and_data)
         if return_code == -5:
             return_code = target.ws.write_string(*coords, formats_and_data[1], formats_and_data[0])
 
         if return_code == -2:
-            raise ValueError('Rich write failed because the string is longer than 32k characters')
+            raise ExecutionCellDSLError('Rich write failed because the string is longer than 32k '
+                                        'characters')
 
         if return_code == -4:
-            raise ValueError('Rich write failed because of an empty string')
+            raise ExecutionCellDSLError('Rich write failed because of an empty string')
 
     def then(self, fragment: 'WriteRichOp'):
         """Submit additional fragments of the rich string"""
@@ -193,6 +213,15 @@ class WriteRichOp(Command, traits.Data, traits.Format, traits.ExecutableCommand)
             self,
             set_format=self.set_format or other,
             default_format=other
+        )
+
+    def with_cell_format(self, format: Optional[FormatDict]):
+        """If `format` is not None, then set the cell format to be set to the cell upon writing.
+
+        This method does not implicitly merge with DEFAULT_FORMAT."""
+        return evolve(
+            self,
+            cell_format=format,
         )
 
     @property
@@ -251,8 +280,8 @@ class DrawBoxBorderOp(Command, traits.Range):
 
 @attrs(auto_attribs=True, frozen=True, order=False)
 class DefineNamedRangeOp(Command, traits.Range, traits.ExecutableCommand):
-    """A command to make a box where `top_left_point` and `bottom_right_point` are respective corners of a range
-    :func:`with_name`."""
+    """A command to make a box :func:`with_top_left` and :func:`with_bottom_right` which are
+    respective corners of a range :func:`with_name`."""
 
     name: str = "__DEFAULT"
 
@@ -422,7 +451,7 @@ class AddChartOp(Command, traits.ExecutableCommand, traits.ForwardRef, Generic[T
 
 @attrs(auto_attribs=True, frozen=True, order=False)
 class AddConditionalFormatOp(Command, traits.ExecutableCommand, traits.Range, traits.Options, traits.Format):
-    """A command to add a conditional format to a range of cells with :func:`top_left` and :func:`bottom_right`
+    """A command to add a conditional format to a range of cells :func:`with_top_left` and :func:`with_bottom_right`
     corners parametrized :func:`with_options`.
 
     To configure the format, you can either use :func:`with_format` or specify the :class:`FormatDict` as
@@ -430,7 +459,7 @@ class AddConditionalFormatOp(Command, traits.ExecutableCommand, traits.Range, tr
 
     def execute(self, target: WorksheetTriplet, coords: traits.Coords):
         if self.set_format and self.options.get('format'):
-            raise ValueError('Both format key and format field are specified, use only one of them.')
+            raise ExecutionCellDSLError('Both format key and format field are specified, use only one of them.')
 
         fmt = None
         if self.set_format:
@@ -448,7 +477,7 @@ class AddConditionalFormatOp(Command, traits.ExecutableCommand, traits.Range, tr
         )
 
         if result == -2:
-            raise ValueError(f"Invalid parameter or options: {self.options}")
+            raise ExecutionCellDSLError(f"Invalid parameter or options: {self.options}")
 
 
 @attrs(auto_attribs=True, frozen=True, order=False)
@@ -467,6 +496,15 @@ class AddImageOp(Command, traits.ExecutableCommand, traits.Options):
         target.ws.insert_image(*coords, self.file_path, self.options)
 
 
+@attrs(auto_attribs=True, frozen=True, order=False)
+class SetPrintAreaOp(Command, traits.ExecutableCommand, traits.Range):
+    """A command that allows to set the printed area of the sheet
+    as a box :func:`with_top_left` and :func:`with_bottom_right`"""
+
+    def execute(self, target: WorksheetTriplet, coords: traits.Coords):
+        target.ws.print_area(*self.top_left_point, *self.bottom_right_point)
+
+
 __all__ = [
     'StackSaveOp', 'StackLoadOp',
     'LoadOp', 'SaveOp',
@@ -478,5 +516,6 @@ __all__ = [
     'DrawBoxBorderOp',
     'SetRowHeightOp', 'SetColumnWidthOp',
     'SubmitVPagebreakOp', 'SubmitHPagebreakOp', 'ApplyPagebreaksOp',
-    'AddCommentOp', 'AddChartOp', 'AddConditionalFormatOp', 'AddImageOp'
+    'AddCommentOp', 'AddChartOp', 'AddConditionalFormatOp', 'AddImageOp',
+    'SetPrintAreaOp'
 ]

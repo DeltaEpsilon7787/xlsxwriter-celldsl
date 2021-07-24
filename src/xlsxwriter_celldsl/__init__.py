@@ -4,9 +4,8 @@ manually and translating the actions into commands in `ops` module, after `commi
 after which stats can be transmitted to a `StatReceiver` and used for further writing, all the while constructing
 text formats by conjunction `FormatDict`s and using some default formats from `FormatsNamespace`."""
 
-from . import cell_dsl, formats, ops, utils
-
+from . import cell_dsl, errors, formats, ops, utils
 from .cell_dsl import StatReceiver, cell_dsl_context
 from .utils import WorkbookPair
 
-__all__ = ['cell_dsl', 'formats', 'ops', 'utils', 'StatReceiver', 'cell_dsl_context', 'WorkbookPair']
+__all__ = ['cell_dsl', 'formats', 'ops', 'utils', 'errors', 'StatReceiver', 'cell_dsl_context', 'WorkbookPair']

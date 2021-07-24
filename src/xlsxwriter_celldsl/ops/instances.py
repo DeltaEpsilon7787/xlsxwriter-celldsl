@@ -45,6 +45,7 @@ DefineNamedRange = classes.DefineNamedRangeOp()
 
 SetRowHeight = classes.SetRowHeightOp()
 SetColWidth = classes.SetColumnWidthOp()
+SetColumnWidth = SetColWidth
 
 SubmitHPagebreak = classes.SubmitHPagebreakOp()
 SubmitVPagebreak = classes.SubmitVPagebreakOp()
@@ -74,6 +75,8 @@ AddRadarChart: classes.AddChartOp['ChartRadar'] = classes.AddChartOp(type='radar
 AddConditionalFormat = classes.AddConditionalFormatOp()
 
 AddImage = classes.AddImageOp()
+
+SetPrintArea = classes.SetPrintAreaOp()
 
 __all__ = [
     'StackSave',
@@ -107,6 +110,7 @@ __all__ = [
     'DefineNamedRange',
     'SetRowHeight',
     'SetColWidth',
+    'SetColumnWidth',
 
     'SubmitHPagebreak',
     'SubmitVPagebreak',
@@ -136,4 +140,6 @@ __all__ = [
     'AddConditionalFormat',
 
     'AddImage',
+
+    'SetPrintArea'
 ]

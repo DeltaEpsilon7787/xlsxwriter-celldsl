@@ -5,8 +5,8 @@ from _pytest.recwarn import warns
 from pytest import fixture, raises
 from xlsxwriter import Workbook
 
-from xlsxwriter_celldsl.cell_dsl import CellDSLError, ExecutionCellDSLError, ExecutorHelper, MovementCellDSLError, \
-    cell_dsl_context
+from xlsxwriter_celldsl.cell_dsl import ExecutorHelper, cell_dsl_context
+from xlsxwriter_celldsl.errors import CellDSLError, ExecutionCellDSLError, MovementCellDSLError
 from xlsxwriter_celldsl.formats import FormatsNamespace as F
 from xlsxwriter_celldsl.ops import *
 from xlsxwriter_celldsl.utils import WorkbookPair, chain_rich
@@ -64,6 +64,19 @@ class TestExecutorHelper:
                 WriteRich
                     .with_data("Beta")
                     .with_format(F.default_header)
+            ])
+        ]
+
+    def test_rich_format_data_cell_format_shortcut(self):
+        assert self.commit([F.default_font, "Alpha", F.default_header, "Beta", F.wrapped]) == [
+            chain_rich([
+                WriteRich
+                    .with_data("Alpha")
+                    .with_format(F.default_font),
+                WriteRich
+                    .with_data("Beta")
+                    .with_format(F.default_header)
+                    .with_cell_format(F.wrapped)
             ])
         ]
 
@@ -139,6 +152,7 @@ class TestCellDSL:
                     WriteRich
                         .with_data(" Epsilon!")
                         .with_format(F.center)
+                        .with_cell_format(F.wrapped)
                 ])
             ])
 
@@ -149,7 +163,8 @@ class TestCellDSL:
             ws_mock.fmt.verify_format(F.default_header), " But gamma...",
             ws_mock.fmt.verify_format(F.default_header), " Yet delta?",
             # with_format implicitly merges with F.default_font
-            ws_mock.fmt.verify_format(F.default_font | F.center), " Epsilon!"
+            ws_mock.fmt.verify_format(F.default_font | F.center), " Epsilon!",
+            ws_mock.fmt.verify_format(F.wrapped)
         )
 
     def test_write_rich_degradation(self, ws_mock, mocker):
@@ -378,13 +393,67 @@ class TestCellDSL:
 
         spy_ws.assert_called_once_with(0, 0, ANY)
 
+    def test_set_print_area(self, ws_mock, mocker):
+        spy_ws = mocker.spy(ws_mock.ws, "print_area")
+
+        with cell_dsl_context(ws_mock) as E:
+            E.commit([
+                Save.at('Alpha'), 333,
+                Save.at('Beta'),
+                SetPrintArea.with_top_left('Alpha').with_bottom_right('Beta')
+            ])
+
+        spy_ws.assert_any_call(0, 0, 3, 3)
+
+    def test_write_rich_impose(self, ws_mock, mocker):
+        spy = mocker.spy(ws_mock.ws, 'write_rich_string')
+
+        with cell_dsl_context(ws_mock) as E:
+            E.commit([
+                chain_rich([
+                    WriteRich
+                        .with_data("Alpha")
+                        .with_format(F.default_font),
+                    WriteRich
+                        .with_data("Beta")
+                        .with_format(F.default_font_bold)
+                        .with_cell_format(F.wrapped)
+                ]),
+                ImposeFormat.with_format(F.rotated_90)
+            ])
+
+        spy.assert_called_with(
+            0, 0,
+            ws_mock.fmt.verify_format(F.default_font), "Alpha",
+            ws_mock.fmt.verify_format(F.default_font_bold), "Beta",
+            ws_mock.fmt.verify_format(F.default_font | F.wrapped | F.rotated_90)
+        )
+
+    def test_write_rich_override(self, ws_mock, mocker):
+        spy = mocker.spy(ws_mock.ws, 'write_rich_string')
+
+        with cell_dsl_context(ws_mock) as E:
+            E.commit([
+                chain_rich([
+                    WriteRich
+                        .with_data("Alpha")
+                        .with_format(F.default_font),
+                    WriteRich
+                        .with_data("Beta")
+                        .with_format(F.default_font_bold)
+                        .with_cell_format(F.wrapped)
+                ]),
+                OverrideFormat.with_format(F.rotated_90)
+            ])
+
+        spy.assert_called_with(
+            0, 0,
+            ws_mock.fmt.verify_format(F.default_font), "Alpha",
+            ws_mock.fmt.verify_format(F.default_font_bold), "Beta",
+            ws_mock.fmt.verify_format(F.default_font | F.rotated_90)
+        )
 
 class TestCellDSLErrors:
-    def test_format_nonformat_error(self):
-        with raises(CellDSLError, match="Format shortcut must be followed"):
-            e = ExecutorHelper()
-            e.commit([F.default_font, None])
-
     def test_negative_coords(self, ws_mock):
         with raises(MovementCellDSLError, match="Illegal coords"):
             with cell_dsl_context(ws_mock) as E:
@@ -504,10 +573,25 @@ class TestCellDSLErrors:
                 ])
 
     def test_conditional_format_ambiguity(self, ws_mock):
-        with raises(ValueError, match=r'Both format key and format field are specified, use only one of them.'):
+        with raises(CellDSLError, match=r'Both format key and format field are specified, use only one of them.'):
             with cell_dsl_context(ws_mock) as E:
                 E.commit([
                     AddConditionalFormat.with_format(F.default_font).with_options({
                         'format': F.highlight_border
                     })
                 ])
+
+    def test_name_stack_coord_unbound(self, ws_mock):
+        with raises(MovementCellDSLError, match='Illegal coords') as exc:
+            with cell_dsl_context(ws_mock) as E:
+                E.commit([
+                    66, SectionBegin.with_name('Section1'), [
+                        4, SectionBegin.with_name('Section2'), [
+                            7,
+                            SectionEnd,
+                        ],
+                        SectionEnd,
+                    ],
+                ])
+
+        assert "Name stack: ['Section2', 'Section1']" in str(exc.value)

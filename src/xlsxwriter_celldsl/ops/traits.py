@@ -1,9 +1,11 @@
 from abc import abstractmethod
 from numbers import Integral, Real
 from typing import Any, ClassVar, Dict, Optional, TYPE_CHECKING, Tuple, TypeVar, Union
+from warnings import warn
 
 from attr import attrib, attrs, evolve
 
+from ..errors import CellDSLError
 from ..formats import FormatDict, FormatHandler, FormatsNamespace
 from ..utils import WorksheetTriplet
 
@@ -95,13 +97,21 @@ class Range(Trait):
     top_left_point: CellPointer = 0
     bottom_right_point: CellPointer = 0
 
-    def top_left(self, point: CellPointer):
+    def with_top_left(self, point: CellPointer):
         """Specify top left corner `point` for this object."""
         return evolve(self, top_left_point=point)
 
-    def bottom_right(self, point: CellPointer):
+    def with_bottom_right(self, point: CellPointer):
         """Specify bottom right corner `point` for this object."""
         return evolve(self, bottom_right_point=point)
+
+    def top_left(self, point: CellPointer):
+        warn("This method is deprecated in favor or `with_top_left`", DeprecationWarning)
+        return self.with_top_left(point)
+
+    def bottom_right(self, point: CellPointer):
+        warn("This method is deprecated in favor or `with_bottom_right`", DeprecationWarning)
+        return self.with_bottom_right(point)
 
 
 @attrs(auto_attribs=True, frozen=True, order=False)
@@ -129,7 +139,7 @@ class DataType(Trait):
             :func:`write`
         """
         if data_type not in self.ACCEPTED_DATA_TYPES:
-            raise ValueError(
+            raise CellDSLError(
                 f'Data type {data_type} is not valid: valid values are {self.ACCEPTED_DATA_TYPES}'
             )
 

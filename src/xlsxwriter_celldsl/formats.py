@@ -49,17 +49,19 @@ class FormatHandler(object):
 
 def ensure_format_uniqueness(class_):
     """A class decorator used to verify that all formats in the decorated class are unique and use FormatDict."""
+    from xlsxwriter_celldsl.errors import CellDSLError
+
     hashes = defaultdict(list)
     for attr in dir(class_):
         if not attr.startswith('_'):
             attr_value = getattr(class_, attr)
             if not isinstance(attr_value, FormatDict):
-                raise TypeError(f'Format {attr_value} must be a FormatDict')
+                raise CellDSLError(f'Format {attr_value} must be a FormatDict')
             hashes[hash(attr_value)].append(attr)
 
     for formats in hashes.values():
         if len(formats) > 1:
-            raise ValueError(f'{formats} are the same')
+            raise CellDSLError(f'{formats} are the same')
 
     return class_
 
