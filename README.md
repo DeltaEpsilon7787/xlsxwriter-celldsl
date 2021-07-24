@@ -114,7 +114,9 @@ with cell_dsl_context(ws_triplet) as E:
     ], 6,
     # Rich string short form, several formats within a single text cell
     F.default_font, "A single cell, but two parts, first half normal ",
-    F.default_font_bold, "but second half bold! For as long as we stay at C4...", 6,
+    F.default_font_bold, "but second half bold! For as long as we stay at C4...",
+    # Adding a format to the end will allow to set the cell format, here enabling the text wrap.
+    F.wrapped, 6,
     "Oops, D4 now",
     # Saving current position as "see you later"
     ops.Save.at("see you later"),
@@ -168,6 +170,22 @@ with cell_dsl_context(ws_triplet) as E:
 ```
 
 # Changelog
+
+## 0.6.0
+
+* Exceptions coming from XlsxWriter are now also captured and provide debug info.
+* Deprecated `top_left` and `right_bottom` methods in Range-d commands, now they use `with_top_left`
+  and `with_right_bottom` to be consistent with other similar methods.
+* Added `SetPrintArea` command.
+* Moved exceptions to `errors` submodule.
+* `cell_dsl_context` is now a proper class `CellDSLContext`.
+* `SectionBeginOp` is no longer affected by coordinates of where they occur, thus preventing unexpected behavior where
+  an inner section started sooner than the outer section because the inner section started at some previous coordinate.
+* `WriteRich` can now accept a cell format. The short form also supports it by placing the cell format as the last
+  fragment in the chain. This removes the restriction of following a format with a format or string since now not doing
+  so will merely mark the end of the short form.
+* Added an alias for `SetColWidth` -- `SetColumnWidth`, to make it consistent with the other ops.
+* `WriteRichOp` and `ImposeFormatOp`/`OverrideFormatOp` are now implemented: they affect the cell format of the op.
 
 ## 0.5.0
 

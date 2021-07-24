@@ -61,6 +61,7 @@ Operations are the commands that are executed after they're committed
    AddChartOp
    AddConditionalFormatOp
    AddImageOp
+   SetPrintAreaOp
 
 .. automodule:: xlsxwriter_celldsl.ops.classes
    :members:
