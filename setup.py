@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 with open("./README.md", encoding='utf-8') as in_:
     setup(
         name='xlsxwriter-celldsl',
-        version='0.5.1',
+        version='0.6.0',
         packages=find_packages(where='src'),
         package_dir={
             "": "src"
